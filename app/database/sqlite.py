@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     refresh_token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL, revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS access_tokens (
+    token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS devices (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, driver TEXT NOT NULL, serial TEXT,
     center_frequency_hz REAL, sample_rate_hz REAL, active INTEGER NOT NULL DEFAULT 1,
