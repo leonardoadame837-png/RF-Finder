@@ -33,18 +33,17 @@ def main() -> int:
     print("Type a command. Type 'help' for commands or 'quit' to exit.\n")
     try:
         while True:
-            command = input("You: ").strip()
+            command = assistant.speech_input.listen()
             if command.lower() in {"quit", "exit"}:
                 break
             if command:
                 result = router.process(command, assistant.context)
                 assistant.context.last_result = result
-                print(f"RF Finder: {result['message']}")
+                assistant.speech_output.speak(result["message"])
     except (KeyboardInterrupt, EOFError):
         print()
     finally:
-        if getattr(simulator, "running", False):
-            simulator.stop()
+        simulator.stop()
         auth.logout(session.token)
 
     return 0
