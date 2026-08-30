@@ -1,6 +1,9 @@
 """RF capture pipeline: source -> DSP -> persistent measurements."""
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+
 from app.database.repositories import AuditRepository, MeasurementRepository
 from app.dsp.analyzer import SpectrumAnalyzer
 from app.dsp.detector import SignalDetector
@@ -22,20 +25,15 @@ class RfCapturePipeline:
     def run(self, frames: int | None = None, user_id: str | None = None) -> list[dict]:
         count = frames if frames is not None else self.config.num_frames
         location = self.gps.current_location()
-        capture_id = self.measurements.db.execute(
-            "INSERT INTO captures(id,device_id,started_at,center_frequency_hz,sample_rate_hz,latitude,longitude,source) VALUES (lower(hex(randomblob(16))),?,?,?,?,?,?,?)",
-            (self.device_id, self.config.center_frequency, self.config.sample_rate, location.latitude, location.longitude, self.config.source),
-        ).lastrowid
-        # SQLite's generated expression above is intentionally opaque; obtain the id from the latest row.
-        row = self.db.fetchone("SELECT id FROM captures ORDER BY rowid DESC LIMIT 1")
-        capture_id = row["id"]
+        capture_id = str(uuid.uuid4())
+        self.db.execute("INSERT INTO captures VALUES (?,?,?,?,?,?,?,?)", (capture_id, self.device_id, datetime.utcnow().isoformat(), self.config.center_frequency, self.config.sample_rate, location.latitude, location.longitude, self.config.source))
         self.source.start()
         results = []
         try:
             for frame_index in range(count):
                 iq = self.source.generate_frame()
-                frequencies, spectrum = self.analyzer.analyze(iq)
-                detections = self.detector.detect(frequencies, spectrum, self.config.noise_floor_db, frame_index)
+                frequencies, spectrum, noise_floor = self.analyzer.analyze(iq)
+                detections = self.detector.detect(frequencies, spectrum, noise_floor, frame_index)
                 for detection in detections:
                     measurement_id = self.measurements.add(detection, capture_id)
                     results.append({"id": measurement_id, "capture_id": capture_id, "frequency_hz": detection.center_frequency_hz, "snr_db": detection.snr_db})
