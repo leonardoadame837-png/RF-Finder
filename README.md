@@ -1,132 +1,148 @@
 # RF Finder
 
-**RF Finder** is a professional RF signal detection and analysis application for Windows, designed to run locally without requiring physical SDR hardware.
+**RF Finder** is a local RF signal detection and analysis application for Windows. It is designed to run against a simulator during development and later against supported SDR hardware.
 
-## Overview
+## Current Status
 
-RF Finder performs passive RF spectrum monitoring and signal analysis:
+**Stage 1 + Voice Assistant Foundation — ready for local testing.**
 
-- **Signal Detection**: Identifies RF signals above noise floor
-- **Spectrum Analysis**: FFT-based frequency domain analysis
-- **Measurements**: Records signal characteristics (frequency, power, bandwidth, SNR)
-- **Visualization**: Live spectrum and waterfall displays
-- **Database Storage**: Local SQLite storage of measurements
-- **GPS Integration**: Future support for location tagging
-- **Local Authentication**: Password-protected startup with process-local sessions
+Implemented:
+- Synthetic IQ signal simulator
+- FFT-based spectrum analysis
+- Signal detection
+- Local password authentication
+- Process-local sessions
+- Controlled assistant tool gateway
+- Natural-language RF command parser
+- Assistant context and routing
+- Console assistant for hardware/cloud-free testing
+- Automated GitHub Actions tests
+
+The voice layer is intentionally provider-independent. The repository currently uses console input/output so it can be tested without microphone drivers, cloud credentials, or an AI API key. Microphone speech-to-text and text-to-speech providers can be added behind the existing interfaces without changing the RF engine.
+
+## Voice Assistant
+
+Run the assistant with:
+
+```bash
+python app/voice_bot.py
+```
+
+After authentication, try:
+
+```text
+start scan
+status
+stop scan
+what can you do
+```
+
+The assistant uses this flow:
+
+```text
+Input
+  |
+  v
+Command parser
+  |
+  v
+Intent
+  |
+  v
+Tool Registry
+  |
+  +---- permission check
+  |
+  v
+RF Finder service
+  |
+  v
+Structured result
+  |
+  v
+Assistant response
+```
+
+The assistant cannot execute arbitrary Python, shell commands, PowerShell, filesystem operations, or unregistered tools. Every operation must be explicitly registered and permission-checked.
+
+### Voice architecture
+
+```text
+app/assistant/
+├── assistant.py     # Orchestration + speech interfaces
+├── intents.py       # Intent model and command parsing
+├── router.py        # Intent-to-tool routing
+└── tools.py         # Controlled tool gateway and permissions
+
+app/voice_bot.py     # Development assistant entry point
+```
+
+### Planned voice providers
+
+The `SpeechInput` and `SpeechOutput` interfaces are provider-neutral. A future microphone/STT/TTS implementation should be added as a separate provider rather than embedded in the router or RF engine.
+
+No API key or cloud credential is required for the current console implementation.
 
 ## Authentication
 
-RF Finder now requires local authentication before the RF processing pipeline starts.
+RF Finder requires local authentication before the main RF processing pipeline starts.
 
-### First run
+On first run, create an administrator account. Passwords are never stored in plaintext. The account metadata uses a random salt and PBKDF2-HMAC-SHA256 password hashing.
 
-When no local account exists, RF Finder prompts for an administrator account. Passwords are **never stored in plaintext**. The account file contains a random salt and a PBKDF2-HMAC-SHA256 password hash.
+Session tokens are generated with Python's `secrets` module, kept only in memory, and expire after one hour. Authentication is local and is not an OAuth server or network identity provider.
 
-### Login flow
+Authentication files:
+- `app/auth.py` — account and session management
+- `tests/test_auth.py` — authentication tests
+- `data/auth/users.json` — local credential metadata; ignored by Git
 
-```text
-Start RF Finder
-      |
-      v
-Check data/auth/users.json
-      |
-      +-- missing/empty --> create first admin account
-      |
-      v
-Prompt for username + password
-      |
-      v
-PBKDF2-HMAC-SHA256 verification
-      |
-      +-- failure --> reject login
-      |
-      v
-Issue random session token in memory
-      |
-      v
-Start RF Finder DSP pipeline
-      |
-      v
-Logout / process exit -> invalidate token
-```
-
-Session tokens are generated with Python's `secrets` module, kept only in memory, and expire after one hour. They are not written to disk or included in RF measurements. The current implementation is intentionally local; it is **not** a network identity provider or OAuth server.
-
-### Authentication components
-
-- `app/auth.py` — account creation, password hashing/verification, session creation, token validation, and logout.
-- `app/main.py` — authentication gate before RF source/DSP initialization.
-- `tests/test_auth.py` — tests for successful login, failed login, plaintext-password protection, logout, and duplicate accounts.
-- `data/auth/users.json` — local credential metadata. The `data/` directory is ignored by Git and must never be committed.
-
-### Security model
-
-- Passwords: salted PBKDF2-HMAC-SHA256 with 600,000 iterations.
-- Salt: cryptographically random 16-byte value per account.
-- Session token: cryptographically random value generated with `secrets`.
-- Token storage: memory only.
-- Token lifetime: 1 hour by default.
-- Comparison: constant-time `hmac.compare_digest`.
-- Authentication errors: deliberately generic to avoid revealing whether a username exists.
-
-This local authentication layer should be replaced or extended with a dedicated identity service if RF Finder later becomes a multi-user network application.
-
-## Target Platform
-
-- **OS**: Windows 11 Pro
-- **CPU**: Intel Core i5-8365U (4 cores / 8 threads)
-- **RAM**: 8 GB
-- **Storage**: 256 GB SSD
-- **Python**: 3.11+
+Security properties:
+- Salted PBKDF2-HMAC-SHA256
+- 600,000 password-hash iterations
+- Random per-account salt
+- Cryptographically random session tokens
+- Constant-time password comparison
+- Generic authentication errors
+- Credentials excluded from Git
 
 ## Architecture
-
-RF Finder uses a modular, layered architecture:
 
 ```text
 RF-Finder/
 ├── app/
-│   ├── main.py              # Authenticated application entry point
-│   ├── auth.py              # Local authentication and sessions
-│   ├── config.py            # Centralized configuration
-│   ├── sources/             # RF signal sources (simulator, SDR)
-│   ├── dsp/                 # Signal processing (FFT, detection)
-│   ├── visualization/       # Display components (spectrum, waterfall)
-│   ├── database/            # Measurement storage
-│   └── gps/                 # Location services
-├── data/                    # Local application data; ignored by Git
-├── tests/                   # Unit tests
-├── requirements.txt         # Python dependencies
+│   ├── main.py
+│   ├── voice_bot.py
+│   ├── auth.py
+│   ├── config.py
+│   ├── assistant/
+│   │   ├── assistant.py
+│   │   ├── intents.py
+│   │   ├── router.py
+│   │   └── tools.py
+│   ├── sources/
+│   │   └── simulator.py
+│   ├── dsp/
+│   │   ├── analyzer.py
+│   │   └── detector.py
+│   ├── visualization/
+│   ├── database/
+│   └── gps/
+├── tests/
+├── data/
+├── .github/workflows/test.yml
+├── requirements.txt
 └── README.md
 ```
 
-## Development Stages
-
-### Stage 1 ✓ Complete
-- Signal simulator (synthetic IQ data)
-- FFT spectrum analyzer
-- Signal detector
-- Command-line output
-- Unit tests
-- Local authentication
-
-### Stage 2 (Future)
-- Live spectrum visualization (matplotlib)
-- Waterfall display
-- SQLite database storage
-- Configuration file support
-
-### Stage 3 (Future)
-- USB SDR support (RTL-SDR)
-- Simulated GPS
-- Enhanced visualization
+The architectural rule is: **AI/voice code may request approved RF Finder operations, but it does not own RF, DSP, database, GPS, authentication, or operating-system internals.**
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.11+
 - pip
+- Windows is the primary target
 
 ### Setup
 
@@ -135,93 +151,94 @@ git clone https://github.com/leonardoadame837-png/RF-Finder.git
 cd RF-Finder
 python -m venv venv
 venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Usage
-
-### Run Main Application
+## Run RF Finder
 
 ```bash
 python app/main.py
 ```
 
-On the first run, create the requested administrator account. On subsequent runs, sign in with that account. Only after successful authentication does RF Finder initialize its signal source and DSP pipeline.
+The first run creates the local administrator account. Later runs require login before RF processing begins.
 
-### Run Tests
+## Run the Assistant
 
 ```bash
-python -m pytest tests/ -v
-# Or
-python -m unittest discover tests/ -v
+python app/voice_bot.py
 ```
+
+The current assistant is a **console test harness**, not yet microphone voice input. This keeps the project deterministic and dependency-light while the RF and security layers are validated.
+
+## Test
+
+Run all tests locally:
+
+```bash
+python -m pytest -q
+```
+
+GitHub Actions automatically runs the test suite on pushes to `main` and pull requests against `main` using Python 3.11 and 3.12.
 
 ## Configuration
 
 Configuration is centralized in `app/config.py`.
 
-Key parameters:
-
 | Parameter | Default | Description |
-|-----------|---------|-------------|
+|---|---:|---|
 | `sample_rate` | 2 MS/s | Complex IQ sample rate |
 | `center_frequency` | 100 MHz | RF center frequency |
 | `fft_size` | 2048 | FFT transform size |
-| `detection_threshold_db` | 6 dB | Signal detection threshold above noise |
-| `minimum_signal_bandwidth_hz` | 10 kHz | Minimum detected signal bandwidth |
+| `detection_threshold_db` | 6 dB | Detection threshold above noise |
+| `minimum_signal_bandwidth_hz` | 10 kHz | Minimum detected bandwidth |
 | `waterfall_history_frames` | 256 | Waterfall display depth |
 | `database_path` | `data/database/rf_finder.db` | SQLite database location |
 
-## Components
+## Development Roadmap
 
-### Signal Sources (`app/sources/`)
+### v0.3 — Voice Assistant Foundation ✓
+- [x] Assistant orchestration
+- [x] Intent parser
+- [x] Tool registry
+- [x] Permission boundary
+- [x] Conversation context
+- [x] Console development provider
+- [x] Assistant tests
+- [x] GitHub Actions CI
 
-**SignalSimulator**: Generates synthetic RF data.
+### v0.4 — Desktop Interface
+- [ ] Live spectrum display
+- [ ] Scrolling waterfall
+- [ ] Signal table
+- [ ] Login screen
+- [ ] Assistant panel
+- [ ] Push-to-talk controls
 
-**SDRSource** (Future): Real USB SDR interface; RTL-SDR support is planned.
+### v0.5 — RF Hardware
+- [ ] SDR abstraction
+- [ ] RTL-SDR source
+- [ ] Device discovery/status
+- [ ] Hardware error handling
 
-### DSP Pipeline (`app/dsp/`)
+### v0.6 — Data and Location
+- [ ] SQLite measurement service
+- [ ] CSV export
+- [ ] GPS integration
+- [ ] Location-tagged measurements
 
-**SpectrumAnalyzer**: FFT-based spectrum analysis, noise-floor estimation, and frequency mapping.
-
-**SignalDetector**: Peak detection, bandwidth estimation, and SNR calculation.
-
-## Performance Considerations
-
-Optimized for the Lenovo ThinkPad T490 (i5-8365U, 8 GB RAM):
-
-- FFT size: 2048 samples
-- Windowing: Hamming window
-- Noise floor: 20th percentile estimation
-- Memory: bounded circular buffers
-- Threading: single-threaded main loop
+### v0.7 — RF Intelligence
+- [ ] Signal classification
+- [ ] Frequency database
+- [ ] Advanced filtering
+- [ ] Measurement summaries
+- [ ] Voice explanations of detected signals
 
 ## Legal Notice
 
-RF Finder is a **spectrum analysis and measurement application** for lawful use.
+RF Finder is a spectrum analysis and measurement application intended for lawful use.
 
-Do NOT use for:
-- Interception of private communications
-- Decryption of encrypted signals
-- Identification of private individuals
-- Unauthorized RF interference
-- Any illegal activity
-
-Use responsibly and comply with applicable RF regulations.
-
-## Future Features
-
-- [ ] Real-time spectrum visualization
-- [ ] Scrolling waterfall display
-- [ ] SQLite measurement database
-- [ ] CSV export
-- [ ] USB SDR support (RTL-SDR)
-- [ ] GPS location tagging
-- [ ] Signal classification
-- [ ] Frequency database lookup
-- [ ] Advanced filtering
-- [ ] Multi-threaded acquisition
-- [ ] Optional network authentication for multi-user deployments
+Do not use it for interception of private communications, decryption of encrypted signals, identification of private individuals, unauthorized RF interference, or other unlawful activity. Comply with applicable RF regulations.
 
 ## License
 
@@ -233,11 +250,3 @@ TBD
 - RTL-SDR: https://osmocom.org/projects/rtl-sdr/wiki
 - scipy.signal: https://docs.scipy.org/doc/scipy/reference/signal.html
 - NumPy FFT: https://numpy.org/doc/stable/reference/routines.fft.html
-
-## Contributing
-
-Contributions welcome. Please ensure:
-- Code follows existing style
-- All tests pass
-- New components are well-documented
-- No external dependencies added without discussion
