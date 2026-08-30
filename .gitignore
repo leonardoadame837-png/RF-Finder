@@ -44,3 +44,12 @@ htmlcov/
 data/
 *.db
 *.log
+
+# Secrets / local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+credentials/

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RF Finder — Live Spectrum</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><strong>RF Finder</strong><span class="muted"> Field Console</span></div>
+    <div id="connection" class="status">● Disconnected</div>
+  </header>
+  <main class="dashboard">
+    <section class="panel controls">
+      <label>Center frequency <input id="frequency" type="number" value="100000000"></label>
+      <label>Sample rate <input id="sample-rate" type="number" value="2000000"></label>
+      <button id="start">Start live view</button>
+      <button id="stop" disabled>Stop</button>
+    </section>
+    <section class="panel chart-panel">
+      <div class="panel-title"><span>LIVE SPECTRUM</span><span id="peak">Peak: —</span></div>
+      <canvas id="spectrum" height="260"></canvas>
+    </section>
+    <section class="panel chart-panel">
+      <div class="panel-title">WATERFALL</div>
+      <canvas id="waterfall" height="360"></canvas>
+    </section>
+    <section class="panel detections">
+      <div class="panel-title">DETECTIONS</div>
+      <table><thead><tr><th>Frequency</th><th>Power</th><th>SNR</th><th>Bandwidth</th></tr></thead><tbody id="detections"><tr><td colspan="4">No detections</td></tr></tbody></table>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
