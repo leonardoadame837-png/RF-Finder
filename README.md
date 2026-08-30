@@ -12,6 +12,64 @@ RF Finder performs passive RF spectrum monitoring and signal analysis:
 - **Visualization**: Live spectrum and waterfall displays
 - **Database Storage**: Local SQLite storage of measurements
 - **GPS Integration**: Future support for location tagging
+- **Local Authentication**: Password-protected startup with process-local sessions
+
+## Authentication
+
+RF Finder now requires local authentication before the RF processing pipeline starts.
+
+### First run
+
+When no local account exists, RF Finder prompts for an administrator account. Passwords are **never stored in plaintext**. The account file contains a random salt and a PBKDF2-HMAC-SHA256 password hash.
+
+### Login flow
+
+```text
+Start RF Finder
+      |
+      v
+Check data/auth/users.json
+      |
+      +-- missing/empty --> create first admin account
+      |
+      v
+Prompt for username + password
+      |
+      v
+PBKDF2-HMAC-SHA256 verification
+      |
+      +-- failure --> reject login
+      |
+      v
+Issue random session token in memory
+      |
+      v
+Start RF Finder DSP pipeline
+      |
+      v
+Logout / process exit -> invalidate token
+```
+
+Session tokens are generated with Python's `secrets` module, kept only in memory, and expire after one hour. They are not written to disk or included in RF measurements. The current implementation is intentionally local; it is **not** a network identity provider or OAuth server.
+
+### Authentication components
+
+- `app/auth.py` — account creation, password hashing/verification, session creation, token validation, and logout.
+- `app/main.py` — authentication gate before RF source/DSP initialization.
+- `tests/test_auth.py` — tests for successful login, failed login, plaintext-password protection, logout, and duplicate accounts.
+- `data/auth/users.json` — local credential metadata. The `data/` directory is ignored by Git and must never be committed.
+
+### Security model
+
+- Passwords: salted PBKDF2-HMAC-SHA256 with 600,000 iterations.
+- Salt: cryptographically random 16-byte value per account.
+- Session token: cryptographically random value generated with `secrets`.
+- Token storage: memory only.
+- Token lifetime: 1 hour by default.
+- Comparison: constant-time `hmac.compare_digest`.
+- Authentication errors: deliberately generic to avoid revealing whether a username exists.
+
+This local authentication layer should be replaced or extended with a dedicated identity service if RF Finder later becomes a multi-user network application.
 
 ## Target Platform
 
@@ -25,17 +83,18 @@ RF Finder performs passive RF spectrum monitoring and signal analysis:
 
 RF Finder uses a modular, layered architecture:
 
-```
+```text
 RF-Finder/
 ├── app/
-│   ├── main.py              # Application entry point
+│   ├── main.py              # Authenticated application entry point
+│   ├── auth.py              # Local authentication and sessions
 │   ├── config.py            # Centralized configuration
 │   ├── sources/             # RF signal sources (simulator, SDR)
 │   ├── dsp/                 # Signal processing (FFT, detection)
 │   ├── visualization/       # Display components (spectrum, waterfall)
 │   ├── database/            # Measurement storage
 │   └── gps/                 # Location services
-├── data/                    # Application data (DB, captures)
+├── data/                    # Local application data; ignored by Git
 ├── tests/                   # Unit tests
 ├── requirements.txt         # Python dependencies
 └── README.md
@@ -49,6 +108,7 @@ RF-Finder/
 - Signal detector
 - Command-line output
 - Unit tests
+- Local authentication
 
 ### Stage 2 (Future)
 - Live spectrum visualization (matplotlib)
@@ -71,15 +131,10 @@ RF-Finder/
 ### Setup
 
 ```bash
-# Clone repository
 git clone https://github.com/leonardoadame837-png/RF-Finder.git
 cd RF-Finder
-
-# Create virtual environment (optional but recommended)
 python -m venv venv
-venv\Scripts\activate  # On Windows
-
-# Install dependencies
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -91,71 +146,19 @@ pip install -r requirements.txt
 python app/main.py
 ```
 
-This will:
-1. Initialize the signal simulator
-2. Generate synthetic RF signals
-3. Perform FFT analysis
-4. Detect signals above noise floor
-5. Display results to console
-
-Expected output:
-
-```
-======================================================================
-RF FINDER — Stage 1: Software-only Prototype
-======================================================================
-Configuration:
-  Source: simulator
-  Sample Rate: 2.0 MS/s
-  Center Frequency: 100.0 MHz
-  FFT Size: 2048
-  Detection Threshold: 6.0 dB above noise
-
-Initializing signal source...
-Signal source initialized.
-  Simulated signals:
-    • 10 MHz above center @ -20 dBm
-    • 25 MHz below center @ -25 dBm
-    • 5 MHz above center @ -30 dBm
-
-Initializing DSP pipeline...
-DSP pipeline ready.
-  Frequency resolution: 1000.0 kHz
-
-Processing 5 RF frames...
-----------------------------------------------------------------------
-Frame 1:
-  Noise Floor: -80.0 dB
-  Detected Signals: 3
-    [1] 110.00 MHz | Power: -20.0 dB | SNR: 60.0 dB | BW: 48.8 kHz
-    [2] 75.00 MHz | Power: -25.0 dB | SNR: 55.0 dB | BW: 48.8 kHz
-    [3] 105.00 MHz | Power: -30.0 dB | SNR: 50.0 dB | BW: 48.8 kHz
-...
-```
+On the first run, create the requested administrator account. On subsequent runs, sign in with that account. Only after successful authentication does RF Finder initialize its signal source and DSP pipeline.
 
 ### Run Tests
 
 ```bash
-# Run all tests
 python -m pytest tests/ -v
-
-# Or use unittest
-python -m unittest discover tests/
+# Or
+python -m unittest discover tests/ -v
 ```
 
 ## Configuration
 
-Configuration is centralized in `app/config.py`:
-
-```python
-from app.config import default_config
-
-# Access or modify settings
-print(default_config.sample_rate)        # 2,000,000 Hz
-print(default_config.center_frequency)   # 100,000,000 Hz
-print(default_config.fft_size)           # 2048
-print(default_config.detection_threshold_db)  # 6.0 dB
-```
+Configuration is centralized in `app/config.py`.
 
 Key parameters:
 
@@ -173,64 +176,25 @@ Key parameters:
 
 ### Signal Sources (`app/sources/`)
 
-**SignalSimulator**: Generates synthetic RF data
-- Configurable noise floor
-- Multiple simultaneous signals
-- Adjustable frequency and power
-- Deterministic output for testing
+**SignalSimulator**: Generates synthetic RF data.
 
-**SDRSource** (Future): Real USB SDR interface
-- RTL-SDR support planned
-- Graceful fallback to simulator
+**SDRSource** (Future): Real USB SDR interface; RTL-SDR support is planned.
 
 ### DSP Pipeline (`app/dsp/`)
 
-**SpectrumAnalyzer**: FFT-based spectrum analysis
-- Windowed FFT
-- Power spectrum calculation
-- Noise floor estimation
-- Frequency bin mapping
+**SpectrumAnalyzer**: FFT-based spectrum analysis, noise-floor estimation, and frequency mapping.
 
-**SignalDetector**: Peak detection and characterization
-- Threshold-based detection above noise floor
-- Peak identification
-- Bandwidth estimation
-- SNR calculation
-
-### Data Structures
-
-**Detection**: Signal detection record
-- Timestamp
-- Center frequency
-- Peak power (dB)
-- Noise floor (dB)
-- Signal-to-noise ratio (dB)
-- Estimated bandwidth
-- Peak magnitude
-
-## Testing
-
-Unit test coverage includes:
-
-- **Simulator**: Shape validation, signal generation, start/stop
-- **FFT Analyzer**: Frequency resolution, dynamic range, noise floor estimation
-- **Detector**: Peak detection, noise rejection, signal characterization
-
-Run tests:
-
-```bash
-python -m unittest discover tests/ -v
-```
+**SignalDetector**: Peak detection, bandwidth estimation, and SNR calculation.
 
 ## Performance Considerations
 
 Optimized for the Lenovo ThinkPad T490 (i5-8365U, 8 GB RAM):
 
-- FFT size: 2048 samples (~1 ms latency at 2 MS/s)
-- Windowing: Hamming window (good sidelobe performance)
-- Noise floor: 20th percentile estimation (robust to signals)
-- Memory: Bounded circular buffers (no unlimited growth)
-- Threading: Single-threaded main loop (no GIL contention)
+- FFT size: 2048 samples
+- Windowing: Hamming window
+- Noise floor: 20th percentile estimation
+- Memory: bounded circular buffers
+- Threading: single-threaded main loop
 
 ## Legal Notice
 
@@ -257,6 +221,7 @@ Use responsibly and comply with applicable RF regulations.
 - [ ] Frequency database lookup
 - [ ] Advanced filtering
 - [ ] Multi-threaded acquisition
+- [ ] Optional network authentication for multi-user deployments
 
 ## License
 
