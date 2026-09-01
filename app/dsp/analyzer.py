@@ -32,9 +32,10 @@ class SpectrumAnalyzer:
         # Apply window
         windowed = iq_data * self.window
         
-        # Compute FFT
+        # Compute FFT and shift so DC is centered
         fft_result = np.fft.fft(windowed)
-        magnitude = np.abs(fft_result)
+        fft_shifted = np.fft.fftshift(fft_result)
+        magnitude = np.abs(fft_shifted)
         
         # Convert to power (dB)
         # Avoid log(0) by adding small epsilon
@@ -43,9 +44,8 @@ class SpectrumAnalyzer:
         power_db = 10 * np.log10(power_linear + epsilon)
         
         # Compute frequency axis (centered around center_frequency)
-        freq_resolution = self.config.sample_rate / self.config.fft_size
         freq_bins = np.fft.fftfreq(self.config.fft_size, 1 / self.config.sample_rate)
-        frequencies = self.config.center_frequency + freq_bins
+        frequencies = self.config.center_frequency + np.fft.fftshift(freq_bins)
         
         # Estimate noise floor (20th percentile)
         noise_floor = np.percentile(power_db, 20)
