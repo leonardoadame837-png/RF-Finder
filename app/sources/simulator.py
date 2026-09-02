@@ -62,10 +62,10 @@ class SignalSimulator:
         iq_data = noise_i + 1j * noise_q
         time_samples = np.arange(self.config.fft_size) / self.config.sample_rate
         for signal in self.signals:
-            signal_freq = self.config.center_frequency + signal.frequency_offset_hz
             signal_power = self._dbm_to_linear(signal.power_dbm)
             signal_amplitude = np.sqrt(signal_power)
-            phase = 2 * np.pi * signal_freq * time_samples
+            # Use frequency offset (baseband) when synthesizing IQ samples
+            phase = 2 * np.pi * signal.frequency_offset_hz * time_samples
             iq_data += signal_amplitude * np.exp(1j * phase)
         self.frame_index += 1
         return iq_data
