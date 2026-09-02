@@ -72,7 +72,8 @@ class SignalDetector:
             peak_idx = np.argmax(region_power)
             peak_frequency = region_freq[peak_idx]
             peak_power = region_power[peak_idx]
-            peak_magnitude = np.sqrt(10 ** (peak_power / 10))  # Linear magnitude
+            # Peak magnitude in linear scale from power: magnitude = sqrt(10^(dB/10))
+            peak_magnitude = np.sqrt(10 ** (peak_power / 10))
             
             # Calculate SNR
             snr = peak_power - noise_floor_db
@@ -82,8 +83,8 @@ class SignalDetector:
             bandwidth_indices = np.where(region_power > peak_level_3db)[0]
             
             if len(bandwidth_indices) > 1:
-                freq_resolution = self.config.sample_rate / self.config.fft_size
-                bandwidth = (bandwidth_indices[-1] - bandwidth_indices[0]) * freq_resolution
+                # Bandwidth is the frequency span between first and last point above 3dB
+                bandwidth = region_freq[bandwidth_indices[-1]] - region_freq[bandwidth_indices[0]]
             else:
                 bandwidth = self.config.sample_rate / self.config.fft_size
             
