@@ -47,8 +47,8 @@ class SpectrumAnalyzer:
         freq_bins = np.fft.fftfreq(self.config.fft_size, 1 / self.config.sample_rate)
         frequencies = self.config.center_frequency + np.fft.fftshift(freq_bins)
         
-        # Estimate noise floor (20th percentile)
-        noise_floor = np.percentile(power_db, 20)
+        # Estimate noise floor (5th percentile to ensure it's below most values)
+        noise_floor = np.percentile(power_db, 5)
         
         return frequencies, power_db, noise_floor
     
