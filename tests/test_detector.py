@@ -14,7 +14,7 @@ class TestSignalDetector:
             sample_rate=2_000_000,
             center_frequency=100_000_000,
             detection_threshold_db=6.0,
-            minimum_signal_bandwidth_hz=1_000,
+            minimum_signal_bandwidth_hz=500,
         )
         self.detector = SignalDetector(self.config)
         self.analyzer = SpectrumAnalyzer(self.config)
