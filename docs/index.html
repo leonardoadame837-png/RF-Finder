@@ -3,28 +3,365 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RF Finder — Field Monitor</title>
+  <title>RF Finder — Professional RF Signal Detection & Analysis</title>
   <style>
-    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071019;color:#d8f4ff;font:14px Arial,sans-serif}header{padding:22px;display:flex;justify-content:space-between;gap:16px;align-items:center;border-bottom:1px solid #24465d}h1{margin:0;color:#62d8ff;font-size:22px}.wrap{max-width:1100px;margin:auto;padding:22px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{background:#0b1823;border:1px solid #24465d;border-radius:8px;padding:18px}.wide{grid-column:1/-1}h2{font-size:16px;margin-top:0;color:#62d8ff}.value{font-size:26px;font-weight:bold}.muted{color:#7ea0b4;line-height:1.5}a{color:#62d8ff}.status{display:inline-block;padding:6px 9px;border:1px solid #2c607d;border-radius:5px}.bar{height:180px;border:1px solid #19394c;background:#03090e;display:flex;align-items:end;gap:2px;padding:8px}.bar i{display:block;flex:1;min-width:2px;background:#62d8ff}.notice{padding:12px;border-left:3px solid #62d8ff;background:#071a26}.footer{margin-top:22px;color:#7ea0b4;font-size:12px}@media(max-width:750px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #071019;
+      color: #d8f4ff;
+      font: 14px Arial, sans-serif;
+      line-height: 1.6;
+    }
+    header {
+      background: linear-gradient(135deg, #0a1f2e, #1a3a50);
+      padding: 30px;
+      text-align: center;
+      border-bottom: 2px solid #0f7a8c;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: #00d4ff;
+      letter-spacing: 1px;
+    }
+    header .subtitle {
+      color: #6db8d0;
+      font-size: 12px;
+      margin-top: 8px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px 20px;
+    }
+    .notice {
+      background: #1a4d5c;
+      border-left: 4px solid #0f7a8c;
+      padding: 16px;
+      margin-bottom: 30px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+    }
+    .card {
+      background: #0a1f2e;
+      border: 1px solid #0f5a6c;
+      border-radius: 6px;
+      padding: 20px;
+      transition: all 0.3s;
+    }
+    .card:hover {
+      background: #0d2a3d;
+      border-color: #00d4ff;
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.1);
+    }
+    .card h2 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: #00d4ff;
+    }
+    .card .value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #0ff;
+      margin-bottom: 8px;
+    }
+    .card p {
+      margin: 0;
+      font-size: 12px;
+      color: #8ba8ba;
+    }
+    .card.wide {
+      grid-column: 1 / -1;
+    }
+    .section-title {
+      font-size: 18px;
+      color: #00d4ff;
+      margin: 30px 0 15px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #0f5a6c;
+    }
+    pre {
+      background: #051015;
+      border: 1px solid #0f5a6c;
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+      color: #7dd3c0;
+    }
+    .code-block {
+      background: #051015;
+      border-left: 3px solid #0f7a8c;
+      padding: 12px 16px;
+      margin: 12px 0;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #7dd3c0;
+    }
+    a {
+      color: #00d4ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #0f5a6c;
+      text-align: center;
+      font-size: 11px;
+      color: #6db8d0;
+    }
+    .arch-diagram {
+      background: #051015;
+      border: 1px solid #0f5a6c;
+      padding: 16px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #7dd3c0;
+      white-space: pre;
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body>
-<header><h1>RF FINDER / FIELD</h1><span class="status">GITHUB PAGES • STATIC FIELD PORTAL</span></header>
-<div class="wrap">
-  <div class="notice">This page is the public static portal. The full live scanner runs locally with <b>python -m app.field</b>; the Python API and SQLite database are not executed by GitHub Pages.</div>
-  <div class="grid" style="margin-top:14px">
-    <section class="card"><h2>Signal Processing</h2><div class="value">FFT + Detection</div><p class="muted">Spectrum analysis, threshold detection, SNR and bandwidth estimation.</p></section>
-    <section class="card"><h2>Field Data</h2><div class="value">GPS Ready</div><p class="muted">Observations can carry latitude, longitude and altitude metadata.</p></section>
-    <section class="card"><h2>Evidence</h2><div class="value">SQLite</div><p class="muted">Detections and investigations are persisted locally for review.</p></section>
-    <section class="card wide"><h2>Live Spectrum Preview</h2><div id="spectrum" class="bar" aria-label="spectrum preview"></div></section>
-    <section class="card wide"><h2>Architecture</h2><p class="muted">Signal source → FFT analyzer → RF detector → live spectrum/waterfall → SQLite observations → investigations → tactical visualization.</p><p><a href="https://github.com/leonardoadame837-png/RF-Finder">View the RF-Finder repository</a></p></section>
-    <section class="card wide"><h2>Run the full field application</h2><p class="muted">On Windows, clone the repository, install the requirements, then start the local tactical server:</p><pre>python -m pip install -r requirements.txt
-python -m app.field</pre></section>
+  <header>
+    <h1>RF FINDER</h1>
+    <div class="subtitle">Professional RF Signal Detection & Analysis for Windows</div>
+  </header>
+
+  <div class="container">
+    <div class="notice">
+      <strong>📌 GitHub Pages Static Portal:</strong> This page provides documentation and links to the full RF Finder application.
+      The live scanner, tactical dashboard, and database run locally via <code>python -m app.field</code>.
+      GitHub Pages is static and does not execute Python or database backends.
+    </div>
+
+    <div class="section-title">🎯 Overview</div>
+    <p>
+      RF Finder is a Windows-based passive RF spectrum analysis application designed for field monitoring, signal detection, 
+      and investigation recording. It combines FFT-based spectrum analysis with threshold detection to identify RF signals 
+      and correlate them with investigation records.
+    </p>
+    <p>
+      <strong>Key capabilities:</strong>
+      <ul>
+        <li>Real-time FFT spectrum analysis with configurable resolution</li>
+        <li>Automatic signal detection above noise floor</li>
+        <li>Waterfall history for temporal signal tracking</li>
+        <li>GPS-tagged observation storage in SQLite</li>
+        <li>Investigation correlation system</li>
+        <li>Local authentication and session management</li>
+        <li>Hardware-agnostic signal source architecture (simulator default, SDR optional)</li>
+      </ul>
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Signal Processing</h2>
+        <div class="value">FFT + Detection</div>
+        <p>Spectrum analysis, threshold detection, SNR and bandwidth estimation. Configurable FFT size, sample rate, and detection threshold.</p>
+      </div>
+      <div class="card">
+        <h2>Field Data</h2>
+        <div class="value">GPS Ready</div>
+        <p>Observations carry latitude, longitude, altitude, and timestamp metadata. Observations are stored in local SQLite database.</p>
+      </div>
+      <div class="card">
+        <h2>Evidence</h2>
+        <div class="value">SQLite + JSON</div>
+        <p>Detections and investigations persist locally. Export observations for analysis, mapping, and reporting.</p>
+      </div>
+      <div class="card">
+        <h2>Security</h2>
+        <div class="value">Local Auth</div>
+        <p>Salted PBKDF2-HMAC-SHA256 password hashing. Process-local session tokens. No cloud dependency or credentials required.</p>
+      </div>
+    </div>
+
+    <div class="section-title">🏗️ Architecture</div>
+    <div class="arch-diagram">Signal Source (Simulator/SDR)
+    ↓
+FFT Spectrum Analyzer
+    ↓
+RF Signal Detector
+    ↓
+Power Spectrum + Detections
+    ↓
+Tactical Dashboard + Waterfall
+    ↓
+Observation Store (SQLite)
+    ↓
+Investigation Records
+    </div>
+
+    <div class="section-title">🚀 Quick Start</div>
+    <p>
+      <strong>Prerequisites:</strong> Python 3.11+, Windows (primary target)
+    </p>
+
+    <div class="code-block">git clone https://github.com/leonardoadame837-png/RF-Finder.git
+cd RF-Finder
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt</div>
+
+    <div class="section-title">▶️ Run the Field Application</div>
+    <p>
+      The default signal source is the software simulator. No hardware is required for testing.
+    </p>
+    <div class="code-block">python -m app.field</div>
+    <p>
+      This starts the RF Finder field monitor on <code>http://127.0.0.1:8000</code> with a live spectrum display, waterfall history, 
+      signal table, and investigation interface.
+    </p>
+
+    <div class="section-title">🧪 Run Tests</div>
+    <div class="code-block">python -m pytest -q</div>
+    <p>
+      Automated tests cover simulator lifecycle, spectrum analysis, signal detection, waterfall bounds, 
+      observation persistence, investigations, tactical API, authentication, and performance benchmarks.
+    </p>
+
+    <div class="section-title">🔧 Configuration</div>
+    <p>All settings are centralized in <code>app/config.py</code>:</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <tr style="background: #0a1f2e; border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px; color: #00d4ff;"><strong>Parameter</strong></td>
+        <td style="padding: 8px; color: #00d4ff;"><strong>Default</strong></td>
+        <td style="padding: 8px; color: #00d4ff;"><strong>Description</strong></td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;"><code>sample_rate</code></td>
+        <td style="padding: 8px;">2 MS/s</td>
+        <td style="padding: 8px;">Complex IQ sample rate</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;"><code>center_frequency</code></td>
+        <td style="padding: 8px;">100 MHz</td>
+        <td style="padding: 8px;">RF center frequency</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;"><code>fft_size</code></td>
+        <td style="padding: 8px;">2048</td>
+        <td style="padding: 8px;">FFT transform size</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;"><code>detection_threshold_db</code></td>
+        <td style="padding: 8px;">6 dB</td>
+        <td style="padding: 8px;">Detection threshold above noise</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;"><code>minimum_signal_bandwidth_hz</code></td>
+        <td style="padding: 8px;">10 kHz</td>
+        <td style="padding: 8px;">Minimum detected bandwidth</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px;"><code>waterfall_history_frames</code></td>
+        <td style="padding: 8px;">256</td>
+        <td style="padding: 8px;">Waterfall display depth</td>
+      </tr>
+    </table>
+
+    <div class="section-title">🔐 Authentication</div>
+    <p>
+      RF Finder requires local authentication before RF processing begins. On first run, you'll create a local administrator account.
+      Passwords are never stored in plaintext—they use random salts and PBKDF2-HMAC-SHA256 with 600,000 iterations.
+      Session tokens are generated with Python's <code>secrets</code> module and expire after one hour.
+    </p>
+
+    <div class="section-title">📡 Signal Sources</div>
+    <p>
+      <strong>Simulator (Default):</strong> Software-only test signal generator. No hardware required. Ideal for development and CI testing.
+    </p>
+    <p>
+      <strong>SDR (Future):</strong> Optional receive-only interface for hardware like RTL-SDR, LimeSDR, or other SoapySDR-compatible devices.
+      The architecture is designed to accept external signal sources via a clean interface. SDR support will remain passive (receive-only).
+    </p>
+
+    <div class="section-title">⚖️ Legal Notice</div>
+    <p>
+      RF Finder is a passive spectrum analysis application intended for lawful use. Do not use it for:
+      <ul>
+        <li>Interception of private communications</li>
+        <li>Decryption of encrypted signals</li>
+        <li>Identification of private individuals</li>
+        <li>Unauthorized RF interference or jamming</li>
+        <li>Threat assessment, targeting, or evasion</li>
+      </ul>
+    </p>
+    <p>
+      RF Finder may be used for lawful purposes including spectrum monitoring, signal anomaly detection, 
+      evidence collection for investigation, Remote-ID observation, and field mapping with appropriate authorization.
+    </p>
+
+    <div class="section-title">📚 Development Roadmap</div>
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <tr style="background: #0a1f2e; border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px; color: #00d4ff;"><strong>Version</strong></td>
+        <td style="padding: 8px; color: #00d4ff;"><strong>Goal</strong></td>
+        <td style="padding: 8px; color: #00d4ff;"><strong>Status</strong></td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;">v0.1</td>
+        <td style="padding: 8px;">Core DSP pipeline + simulator</td>
+        <td style="padding: 8px;">✓ Complete</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;">v0.2</td>
+        <td style="padding: 8px;">Local auth + SQLite storage</td>
+        <td style="padding: 8px;">✓ Complete</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;">v0.3</td>
+        <td style="padding: 8px;">Tactical API + web UI</td>
+        <td style="padding: 8px;">✓ Complete</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;">v0.4</td>
+        <td style="padding: 8px;">Desktop UI refinement</td>
+        <td style="padding: 8px;">⊘ Planned</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #0f5a6c;">
+        <td style="padding: 8px;">v0.5</td>
+        <td style="padding: 8px;">SDR hardware abstraction</td>
+        <td style="padding: 8px;">⊘ Planned</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px;">v0.6+</td>
+        <td style="padding: 8px;">Advanced analytics & export</td>
+        <td style="padding: 8px;">⊘ Future</td>
+      </tr>
+    </table>
+
+    <div class="section-title">🔗 References</div>
+    <ul>
+      <li><a href="https://www.gnuradio.org/">GNU Radio</a> — Open-source software radio ecosystem</li>
+      <li><a href="https://osmocom.org/projects/rtl-sdr/wiki">RTL-SDR Wiki</a> — RTL-SDR device documentation</li>
+      <li><a href="https://docs.scipy.org/doc/scipy/reference/signal.html">SciPy Signal Processing</a> — Signal filtering and analysis</li>
+      <li><a href="https://numpy.org/doc/stable/reference/routines.fft.html">NumPy FFT</a> — Fast Fourier Transform reference</li>
+      <li><a href="https://github.com/pothosware/SoapySDR/wiki">SoapySDR</a> — Unified SDR interface</li>
+    </ul>
+
+    <div class="footer">
+      <strong>Passive RF monitoring only.</strong> A measured RF signal is evidence for investigation, not proof of surveillance, 
+      intent, identity, or illegality.<br>
+      <a href="https://github.com/leonardoadame837-png/RF-Finder">View on GitHub</a> | 
+      <a href="https://github.com/leonardoadame837-png/RF-Finder/issues">Issues & Feedback</a>
+    </div>
   </div>
-  <div class="footer">Passive RF monitoring only. A measured RF signal is evidence for investigation, not proof of surveillance, intent, identity, or illegality.</div>
-</div>
-<script>
-const box=document.getElementById('spectrum');for(let i=0;i<90;i++){const b=document.createElement('i');const x=i/89;const peak=Math.exp(-Math.pow((x-.57)/.09,2));b.style.height=(18+peak*70+Math.random()*18)+'%';box.appendChild(b)}
-</script>
 </body>
 </html>
