@@ -17,11 +17,7 @@ from app.storage import ObservationStore
 
 
 class RFService:
-    """Continuous laptop-first RF monitoring service.
-
-    The default source is the software simulator. A future SDR source can be
-    injected without changing the service/UI contract.
-    """
+    """Continuous laptop-first RF monitoring service."""
 
     def __init__(self, config=default_config, source=None, scan_interval_s: float = 0.5):
         self.config = config
@@ -79,8 +75,13 @@ class RFService:
             started = time.monotonic()
             try:
                 self.scan_once()
-            except Exception as exc:  # keep field monitoring alive after a bad frame
+            except Exception as exc:
                 with self._lock:
+                    # A source may have advanced its own frame counter before
+                    # a DSP/storage error. Preserve that progress in the API so
+                    # operators can distinguish a live source from a stalled one.
+                    source_frame = getattr(self.source, "frame_index", self._frame_index)
+                    self._frame_index = max(self._frame_index, int(source_frame))
                     self._last_error = f"{type(exc).__name__}: {exc}"
             delay = self.scan_interval_s - (time.monotonic() - started)
             if delay > 0:
@@ -123,10 +124,13 @@ class RFService:
                 evidence="simulated_signal" if self.source_name == "simulator" else "rf_measurement",
                 simulated=self.source_name == "simulator",
             )
-            classified = classify_observation(observation)
-            self.store.add(classified)
+            self.store.add(classify_observation(observation))
 
-        return {"frame_index": frame_index, "detections": len(detections), "noise_floor_db": float(noise_floor)}
+        return {
+            "frame_index": frame_index,
+            "detections": len(detections),
+            "noise_floor_db": float(noise_floor),
+        }
 
     def status(self) -> dict:
         with self._lock:
