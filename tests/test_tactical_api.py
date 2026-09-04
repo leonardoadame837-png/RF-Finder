@@ -40,7 +40,7 @@ def make_service(tmp_path):
         minimum_signal_bandwidth_hz=10_000.0,
         waterfall_history_frames=4,
         database_path=str(tmp_path / "api.db"),
-        simulator_noise_floor_db=-80.0,
+        noise_floor_db=-80.0,
         num_frames=1,
     )
     return RFService(config, source=FakeSource(), scan_interval_s=0.01)
