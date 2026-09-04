@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """RF Finder - Stage 1: Software-only prototype with local authentication."""
 
+import os
 import sys
 from app.auth import AuthManager, first_run_setup, login_prompt
 from app.config import default_config
 from app.sources.simulator import SignalSimulator
 from app.dsp.analyzer import SpectrumAnalyzer
 from app.dsp.detector import SignalDetector
+from app.observation import RFObservation, classify_observation
+from app.storage import ObservationStore
 
 
 def format_frequency(freq_hz: float) -> str:
@@ -20,8 +23,21 @@ def format_frequency(freq_hz: float) -> str:
     return f"{freq_hz:.0f} Hz"
 
 
+def _gps_from_environment():
+    """Read optional receiver coordinates without pretending the simulator has GPS."""
+    try:
+        lat = float(os.getenv("RF_FINDER_LAT", ""))
+        lon = float(os.getenv("RF_FINDER_LON", ""))
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError
+        alt = float(os.getenv("RF_FINDER_ALT_M", "0"))
+        return lat, lon, alt
+    except (TypeError, ValueError):
+        return None, None, None
+
+
 def main() -> int:
-    """Authenticate the local user, then run the RF Finder pipeline."""
+    """Authenticate the local user, run the RF pipeline, and persist observations."""
     auth = AuthManager()
     if not auth.has_account():
         first_run_setup(auth)
@@ -52,9 +68,11 @@ def main() -> int:
     print("Initializing DSP pipeline...")
     analyzer = SpectrumAnalyzer(default_config)
     detector = SignalDetector(default_config)
+    store = ObservationStore(default_config.database_path)
+    lat, lon, alt = _gps_from_environment()
     print("DSP pipeline ready.")
-    freq_res = analyzer.get_frequency_resolution()
-    print(f"  Frequency resolution: {freq_res / 1e3:.1f} kHz")
+    print(f"  Frequency resolution: {analyzer.get_frequency_resolution() / 1e3:.1f} kHz")
+    print(f"  Receiver position: {'configured' if lat is not None else 'not configured'}")
     print()
 
     print(f"Processing {default_config.num_frames} RF frames...")
@@ -69,11 +87,26 @@ def main() -> int:
             print(f"  Noise Floor: {noise_floor:.1f} dB")
             print(f"  Detected Signals: {len(detections)}")
             for i, det in enumerate(detections, 1):
+                observation = classify_observation(RFObservation.now(
+                    frequency_hz=det.center_frequency_hz,
+                    peak_power_db=det.peak_power_db,
+                    noise_floor_db=noise_floor,
+                    snr_db=det.snr_db,
+                    bandwidth_hz=det.bandwidth_hz,
+                    latitude=lat,
+                    longitude=lon,
+                    altitude_m=alt,
+                    source=default_config.source,
+                    evidence="simulated_signal" if default_config.source == "simulator" else "",
+                    simulated=default_config.source == "simulator",
+                ))
+                store.add(observation)
                 print(
                     f"    [{i}] {format_frequency(det.center_frequency_hz)} | "
                     f"Power: {det.peak_power_db:.1f} dB | "
                     f"SNR: {det.snr_db:.1f} dB | "
-                    f"BW: {det.bandwidth_hz / 1e3:.1f} kHz"
+                    f"BW: {det.bandwidth_hz / 1e3:.1f} kHz | "
+                    f"Class: {observation.signal_class}"
                 )
             if frame_num < default_config.num_frames:
                 print()
@@ -82,7 +115,8 @@ def main() -> int:
         auth.logout(session.token)
 
     print("-" * 70)
-    print("\nProcessing complete. Session closed.")
+    print(f"\nProcessing complete. Observations saved to {default_config.database_path}.")
+    print("Run `python -m app.tactical_server` to open the tactical map.")
     return 0
 
 
