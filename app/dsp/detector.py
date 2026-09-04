@@ -1,8 +1,9 @@
 """RF Signal Detector - Peak detection and characterization."""
 
-import numpy as np
 from dataclasses import dataclass
 from typing import List
+
+import numpy as np
 
 
 @dataclass
@@ -18,90 +19,84 @@ class Detection:
 
 
 class SignalDetector:
-    """Detects RF signals above noise floor and characterizes them."""
-    
+    """Detect signals above a robust noise baseline and characterize them."""
+
     def __init__(self, config):
-        """Initialize the signal detector.
-        
-        Args:
-            config: Config object with detection_threshold_db, etc.
-        """
         self.config = config
-    
-    def detect(self, frequencies: np.ndarray, power_spectrum: np.ndarray,
-               noise_floor_db: float, frame_index: int = 0) -> List[Detection]:
-        """Detect signals above noise floor threshold.
-        
-        Args:
-            frequencies: Array of frequency values (Hz)
-            power_spectrum: Power spectrum in dB
-            noise_floor_db: Estimated noise floor in dB
-            frame_index: Current frame number
-            
-        Returns:
-            List of Detection objects for each detected signal
+
+    def detect(
+        self,
+        frequencies: np.ndarray,
+        power_spectrum: np.ndarray,
+        noise_floor_db: float,
+        frame_index: int = 0,
+    ) -> List[Detection]:
+        """Detect contiguous signal regions above an adaptive threshold.
+
+        A minimum 12 dB margin is used for the detector to avoid treating the
+        ordinary statistical peaks of broadband Gaussian noise as signals.
+        ``detection_threshold_db`` remains the user-configurable floor, so a
+        higher configured threshold is always respected.
         """
-        detections = []
-        
-        # Calculate detection threshold
-        threshold = noise_floor_db + self.config.detection_threshold_db
-        
-        # Find peaks above threshold
+        frequencies = np.asarray(frequencies)
+        power_spectrum = np.asarray(power_spectrum)
+        if frequencies.shape != power_spectrum.shape:
+            raise ValueError("frequencies and power_spectrum must have the same shape")
+        if frequencies.size == 0:
+            return []
+        if not np.all(np.isfinite(power_spectrum)):
+            return []
+
+        # The analyzer supplies a robust median noise floor. The additional
+        # margin provides a conservative false-alarm guard for random FFT peaks.
+        threshold_margin_db = max(float(self.config.detection_threshold_db), 12.0)
+        threshold = float(noise_floor_db) + threshold_margin_db
         above_threshold = power_spectrum > threshold
-        
         if not np.any(above_threshold):
-            return detections
-        
-        # Find peak indices
-        diff = np.diff(above_threshold.astype(int))
-        starts = np.where(diff == 1)[0] + 1
-        ends = np.where(diff == -1)[0] + 1
-        
-        # Handle edge cases
+            return []
+
+        changes = np.diff(above_threshold.astype(np.int8))
+        starts = np.where(changes == 1)[0] + 1
+        ends = np.where(changes == -1)[0] + 1
         if above_threshold[0]:
-            starts = np.concatenate([[0], starts])
+            starts = np.concatenate(([0], starts))
         if above_threshold[-1]:
-            ends = np.concatenate([ends, [len(above_threshold)]])
-        
-        # Process each detected signal region
+            ends = np.concatenate((ends, [len(above_threshold)]))
+
+        detections: List[Detection] = []
+        frequency_resolution = float(self.config.sample_rate) / float(self.config.fft_size)
+
         for start, end in zip(starts, ends):
             region_power = power_spectrum[start:end]
             region_freq = frequencies[start:end]
-            
-            # Find peak within region
-            peak_idx = np.argmax(region_power)
-            peak_frequency = region_freq[peak_idx]
-            peak_power = region_power[peak_idx]
-            # Peak magnitude in linear scale from power: magnitude = sqrt(10^(dB/10))
-            peak_magnitude = np.sqrt(10 ** (peak_power / 10))
-            
-            # Calculate SNR
-            snr = peak_power - noise_floor_db
-            
-            # Estimate bandwidth (3dB bandwidth)
-            peak_level_3db = peak_power - 3
-            bandwidth_indices = np.where(region_power > peak_level_3db)[0]
-            
+            peak_idx = int(np.argmax(region_power))
+            peak_power = float(region_power[peak_idx])
+            peak_frequency = float(region_freq[peak_idx])
+
+            # Estimate occupied 3 dB bandwidth within the detected region.
+            peak_level_3db = peak_power - 3.0
+            bandwidth_indices = np.where(region_power >= peak_level_3db)[0]
             if len(bandwidth_indices) > 1:
-                # Bandwidth is the frequency span between first and last point above 3dB
-                bandwidth = region_freq[bandwidth_indices[-1]] - region_freq[bandwidth_indices[0]]
+                bandwidth = float(
+                    region_freq[bandwidth_indices[-1]] - region_freq[bandwidth_indices[0]]
+                )
             else:
-                bandwidth = self.config.sample_rate / self.config.fft_size
-            
-            # Ensure minimum bandwidth threshold
-            if bandwidth >= self.config.minimum_signal_bandwidth_hz:
-                detection = Detection(
+                bandwidth = frequency_resolution
+
+            if bandwidth < float(self.config.minimum_signal_bandwidth_hz):
+                continue
+
+            detections.append(
+                Detection(
                     center_frequency_hz=peak_frequency,
                     peak_power_db=peak_power,
-                    noise_floor_db=noise_floor_db,
-                    snr_db=snr,
+                    noise_floor_db=float(noise_floor_db),
+                    snr_db=peak_power - float(noise_floor_db),
                     bandwidth_hz=bandwidth,
-                    peak_magnitude=peak_magnitude,
-                    timestamp_frame=frame_index
+                    peak_magnitude=float(np.sqrt(10.0 ** (peak_power / 10.0))),
+                    timestamp_frame=frame_index,
                 )
-                detections.append(detection)
-        
-        # Sort by frequency
-        detections.sort(key=lambda d: d.center_frequency_hz)
-        
+            )
+
+        detections.sort(key=lambda detection: detection.center_frequency_hz)
         return detections
