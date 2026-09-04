@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RF Finder — Field Monitor</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071019;color:#d8f4ff;font:14px Arial,sans-serif}header{padding:22px;display:flex;justify-content:space-between;gap:16px;align-items:center;border-bottom:1px solid #24465d}h1{margin:0;color:#62d8ff;font-size:22px}.wrap{max-width:1100px;margin:auto;padding:22px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{background:#0b1823;border:1px solid #24465d;border-radius:8px;padding:18px}.wide{grid-column:1/-1}h2{font-size:16px;margin-top:0;color:#62d8ff}.value{font-size:26px;font-weight:bold}.muted{color:#7ea0b4;line-height:1.5}a{color:#62d8ff}.status{display:inline-block;padding:6px 9px;border:1px solid #2c607d;border-radius:5px}.bar{height:180px;border:1px solid #19394c;background:#03090e;display:flex;align-items:end;gap:2px;padding:8px}.bar i{display:block;flex:1;min-width:2px;background:#62d8ff}.notice{padding:12px;border-left:3px solid #62d8ff;background:#071a26}.footer{margin-top:22px;color:#7ea0b4;font-size:12px}@media(max-width:750px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+<header><h1>RF FINDER / FIELD</h1><span class="status">GITHUB PAGES • STATIC FIELD PORTAL</span></header>
+<div class="wrap">
+  <div class="notice">This page is the public static portal. The full live scanner runs locally with <b>python -m app.field</b>; the Python API and SQLite database are not executed by GitHub Pages.</div>
+  <div class="grid" style="margin-top:14px">
+    <section class="card"><h2>Signal Processing</h2><div class="value">FFT + Detection</div><p class="muted">Spectrum analysis, threshold detection, SNR and bandwidth estimation.</p></section>
+    <section class="card"><h2>Field Data</h2><div class="value">GPS Ready</div><p class="muted">Observations can carry latitude, longitude and altitude metadata.</p></section>
+    <section class="card"><h2>Evidence</h2><div class="value">SQLite</div><p class="muted">Detections and investigations are persisted locally for review.</p></section>
+    <section class="card wide"><h2>Live Spectrum Preview</h2><div id="spectrum" class="bar" aria-label="spectrum preview"></div></section>
+    <section class="card wide"><h2>Architecture</h2><p class="muted">Signal source → FFT analyzer → RF detector → live spectrum/waterfall → SQLite observations → investigations → tactical visualization.</p><p><a href="https://github.com/leonardoadame837-png/RF-Finder">View the RF-Finder repository</a></p></section>
+    <section class="card wide"><h2>Run the full field application</h2><p class="muted">On Windows, clone the repository, install the requirements, then start the local tactical server:</p><pre>python -m pip install -r requirements.txt
+python -m app.field</pre></section>
+  </div>
+  <div class="footer">Passive RF monitoring only. A measured RF signal is evidence for investigation, not proof of surveillance, intent, identity, or illegality.</div>
+</div>
+<script>
+const box=document.getElementById('spectrum');for(let i=0;i<90;i++){const b=document.createElement('i');const x=i/89;const peak=Math.exp(-Math.pow((x-.57)/.09,2));b.style.height=(18+peak*70+Math.random()*18)+'%';box.appendChild(b)}
+</script>
+</body>
+</html>
