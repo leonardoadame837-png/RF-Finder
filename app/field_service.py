@@ -56,6 +56,21 @@ class RFService:
             self._stop.clear()
             self._running = True
             self._last_error = None
+
+        # Populate the UI immediately instead of making callers wait for the
+        # first background interval. Failures are retained in status and the
+        # worker continues retrying the source.
+        try:
+            self.scan_once()
+        except Exception as exc:
+            with self._lock:
+                source_frame = getattr(self.source, "frame_index", self._frame_index)
+                self._frame_index = max(self._frame_index, int(source_frame))
+                self._last_error = f"{type(exc).__name__}: {exc}"
+
+        with self._lock:
+            if not self._running:
+                return
             self._thread = threading.Thread(target=self._run, name="rf-finder-scan", daemon=True)
             self._thread.start()
 
@@ -77,9 +92,6 @@ class RFService:
                 self.scan_once()
             except Exception as exc:
                 with self._lock:
-                    # A source may have advanced its own frame counter before
-                    # a DSP/storage error. Preserve that progress in the API so
-                    # operators can distinguish a live source from a stalled one.
                     source_frame = getattr(self.source, "frame_index", self._frame_index)
                     self._frame_index = max(self._frame_index, int(source_frame))
                     self._last_error = f"{type(exc).__name__}: {exc}"
