@@ -30,14 +30,14 @@ class FakeSource:
 def make_config(tmp_path, fft_size=256, history=4):
     return Config(
         source="simulator",
-        sample_rate=2_000_000.0,
-        center_frequency=100_000_000.0,
+        sample_rate=2_000_000,
+        center_frequency=100_000_000,
         fft_size=fft_size,
         detection_threshold_db=6.0,
-        minimum_signal_bandwidth_hz=10_000.0,
+        minimum_signal_bandwidth_hz=10_000,
         waterfall_history_frames=history,
         database_path=str(tmp_path / "rf.db"),
-        simulator_noise_floor_db=-80.0,
+        noise_floor_db=-80.0,
         num_frames=1,
     )
 
@@ -53,13 +53,13 @@ def test_scan_once_updates_spectrum_and_waterfall(tmp_path):
     assert spectrum["timestamp"]
     assert len(spectrum["frequencies_hz"]) == 256
     assert len(spectrum["power_db"]) == 256
-    assert spectrum["sample_rate_hz"] == 2_000_000.0
-    assert spectrum["center_frequency_hz"] == 100_000_000.0
+    assert spectrum["sample_rate_hz"] == 2_000_000
+    assert spectrum["center_frequency_hz"] == 100_000_000
 
     waterfall = service.waterfall()
     assert waterfall["frame_count"] == 1
     assert len(waterfall["frames"]) == 1
-    assert len(waterfall["frames"][0]["power_db"]) == 256
+    assert len(waterfall["frames"][0]) == 256
 
 
 def test_waterfall_is_bounded(tmp_path):
