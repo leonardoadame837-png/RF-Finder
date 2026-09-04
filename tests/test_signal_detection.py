@@ -14,6 +14,7 @@ class TestSignalDetection:
             sample_rate=2_000_000,
             center_frequency=100_000_000,
             detection_threshold_db=6.0,
+            minimum_signal_bandwidth_hz=1_000,
         )
         self.analyzer = SpectrumAnalyzer(self.config)
         self.detector = SignalDetector(self.config)
@@ -121,8 +122,7 @@ class TestEdgeCases:
         for sample_rate in [1_000_000, 2_000_000, 4_000_000]:
             config = Config(fft_size=2048, sample_rate=sample_rate, center_frequency=100_000_000)
             analyzer = SpectrumAnalyzer(config)
-            iq_data = np.random.randn(2048) + 1j * np.random.randn(2048)
-            frequencies, _, _ = analyzer.analyze(iq_data)
+            frequencies, _, _ = analyzer.analyze(np.random.randn(2048) + 1j * np.random.randn(2048))
             freq_res = analyzer.get_frequency_resolution()
             assert abs(freq_res - sample_rate / 2048) < 1e-6
             assert np.all(np.diff(frequencies) > 0)
