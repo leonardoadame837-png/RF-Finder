@@ -32,7 +32,12 @@ class TestSignalDetection:
         assert abs(detected_freq - expected_freq) < 20_000
 
     def test_no_detection_in_noise(self):
-        iq_data = (np.random.randn(self.config.fft_size) + 1j * np.random.randn(self.config.fft_size)) * 0.01
+        # Use a fixed high-tail noise realization so this regression test is
+        # deterministic and specifically exercises the detector's statistical
+        # false-alarm guard. Seed 785 produces a ~13.35 dB FFT peak above the
+        # median noise floor, which must remain below the detector's 15 dB gate.
+        rng = np.random.default_rng(785)
+        iq_data = (rng.standard_normal(self.config.fft_size) + 1j * rng.standard_normal(self.config.fft_size)) * 0.01
         frequencies, power_spectrum, noise_floor = self.analyzer.analyze(iq_data)
         detections = self.detector.detect(frequencies, power_spectrum, noise_floor)
         assert len(detections) == 0
@@ -53,8 +58,7 @@ class TestSignalDetection:
         offsets = [-700_000, 200_000]
         signals = sum(0.5 * np.exp(2j * np.pi * offset * t) for offset in offsets)
         noise = (np.random.randn(self.config.fft_size) + 1j * np.random.randn(self.config.fft_size)) * 0.01
-        frequencies, power_spectrum, noise_floor = self.analyzer.analyze(signals + noise)
-        detections = self.detector.detect(frequencies, power_spectrum, noise_floor)
+        detections = self.detector.detect(*self.analyzer.analyze(signals + noise), frame_index=0)
         assert len(detections) >= 2
 
     def test_detection_with_minimum_bandwidth(self):
