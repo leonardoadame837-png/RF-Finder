@@ -1,10 +1,14 @@
 name: Deploy RF Finder to GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["RF Finder Tests"]
+    types: [completed]
   workflow_dispatch:
 
+# Pages deployment is deliberately limited to repository contents plus the
+# GitHub Pages deployment APIs. The repository's Pages site must be enabled
+# once in Settings -> Pages with Source set to "GitHub Actions".
 permissions:
   contents: read
   pages: write
@@ -16,18 +20,19 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
