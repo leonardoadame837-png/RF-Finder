@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.api_auth import APIAuth
+from app.api_auth import APIAuth, ROLE_PERMISSIONS
 from app.auth import AuthManager
 
 
@@ -22,7 +22,7 @@ class TestAPIAuth(unittest.TestCase):
         principal = self.api.require("Bearer " + session.token, "rf.read")
         self.assertEqual(principal.user.username, "user")
         self.assertTrue(principal.can("rf.scan"))
-        self.assertNotIn("admin.users", principal.session.user.role if False else [])
+        self.assertNotIn("admin.users", ROLE_PERMISSIONS["user"])
 
     def test_missing_token_is_rejected(self):
         with self.assertRaises(PermissionError):
