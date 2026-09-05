@@ -33,10 +33,10 @@ class SignalDetector:
     ) -> List[Detection]:
         """Detect contiguous signal regions above an adaptive threshold.
 
-        A minimum 12 dB margin is used for the detector to avoid treating the
-        ordinary statistical peaks of broadband Gaussian noise as signals.
-        ``detection_threshold_db`` remains the user-configurable floor, so a
-        higher configured threshold is always respected.
+        Broadband FFT noise produces random peaks that can sit more than the
+        user-configured threshold above the median noise floor. A conservative
+        15 dB minimum margin keeps those statistical excursions from becoming
+        detections while preserving the configured threshold as the lower bound.
         """
         frequencies = np.asarray(frequencies)
         power_spectrum = np.asarray(power_spectrum)
@@ -47,9 +47,11 @@ class SignalDetector:
         if not np.all(np.isfinite(power_spectrum)):
             return []
 
-        # The analyzer supplies a robust median noise floor. The additional
-        # margin provides a conservative false-alarm guard for random FFT peaks.
-        threshold_margin_db = max(float(self.config.detection_threshold_db), 12.0)
+        # The analyzer supplies a robust median noise floor. For an FFT of
+        # broadband Gaussian noise, the largest bin is expected to exceed the
+        # median by roughly 10-13 dB. Requiring 15 dB provides a practical
+        # false-alarm guard for the detector without suppressing strong tones.
+        threshold_margin_db = max(float(self.config.detection_threshold_db), 15.0)
         threshold = float(noise_floor_db) + threshold_margin_db
         above_threshold = power_spectrum > threshold
         if not np.any(above_threshold):
