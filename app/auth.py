@@ -98,14 +98,18 @@ class AuthManager:
         self._sessions[token] = session
         return session
 
-    def validate_token(self, token: str) -> User | None:
+    def get_session(self, token: str) -> Session | None:
+        """Return a live session without exposing the internal session store."""
         session = self._sessions.get(token)
-        if session is None:
+        if session is None or session.expires_at <= time.time():
+            if session is not None:
+                self._sessions.pop(token, None)
             return None
-        if session.expires_at <= time.time():
-            self._sessions.pop(token, None)
-            return None
-        return session.user
+        return session
+
+    def validate_token(self, token: str) -> User | None:
+        session = self.get_session(token)
+        return session.user if session else None
 
     def logout(self, token: str) -> None:
         self._sessions.pop(token, None)
