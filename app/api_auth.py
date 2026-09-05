@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
 
-from app.auth import AuthError, AuthManager, Session, User
+from app.auth import AuthManager, Session, User
 
 
 ROLE_PERMISSIONS = {
@@ -24,7 +23,7 @@ class APIPrincipal:
 
 
 class APIAuth:
-    """Adapter that authenticates Bearer tokens and applies role permissions."""
+    """Authenticate Bearer tokens and apply role-based permissions."""
 
     def __init__(self, auth: AuthManager | None = None):
         self.auth = auth or AuthManager()
@@ -38,13 +37,8 @@ class APIAuth:
         token = authorization[7:].strip()
         if not token:
             return None
-        user = self.auth.validate_token(token)
-        if user is None:
-            return None
-        session = self.auth._sessions.get(token)
-        if session is None:
-            return None
-        return APIPrincipal(user=user, session=session)
+        session = self.auth.get_session(token)
+        return APIPrincipal(user=session.user, session=session) if session else None
 
     def require(self, authorization: str | None, permission: str | None = None) -> APIPrincipal:
         principal = self.principal_from_header(authorization)
