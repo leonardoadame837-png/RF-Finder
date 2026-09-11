@@ -9,6 +9,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 
+from app.ai_spectrum_agent import LocalSpectrumAnalyst, build_agent_context
 from app.config import default_config
 from app.device_telemetry import TelemetryStore
 from app.dsp.analyzer import SpectrumAnalyzer
@@ -29,6 +30,7 @@ class RFService:
         self.detector = SignalDetector(config)
         self.store = ObservationStore(config.database_path)
         self.telemetry = TelemetryStore()
+        self.agent = LocalSpectrumAnalyst()
         self.scan_interval_s = max(0.05, float(scan_interval_s))
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -50,12 +52,7 @@ class RFService:
             return SignalSimulator(config)
         if mode == "sdr":
             from app.sources.sdr import RTLSDRSource
-
-            return RTLSDRSource(
-                config,
-                device_index=config.sdr_device_index,
-                gain=config.sdr_gain,
-            )
+            return RTLSDRSource(config, device_index=config.sdr_device_index, gain=config.sdr_gain)
         raise ValueError(f"Unsupported RF source: {config.source!r}. Use simulator or sdr.")
 
     @staticmethod
@@ -159,6 +156,13 @@ class RFService:
         """Accept optional browser/device telemetry from a trusted local client."""
         return self.telemetry.update(payload)
 
+    def spectrum_agent_analysis(self) -> dict:
+        """Return grounded AI analysis of the latest measured spectrum."""
+        spectrum = self.latest_spectrum()
+        observations = self.observations(limit=30)
+        context = build_agent_context(spectrum, observations)
+        return self.agent.analyze(context)
+
     def status(self) -> dict:
         with self._lock:
             source_status = self.source.status() if hasattr(self.source, "status") else {}
@@ -178,6 +182,7 @@ class RFService:
                 "fft_size": self.config.fft_size,
                 "gps": {"latitude": self._lat, "longitude": self._lon, "altitude_m": self._alt},
                 "device_telemetry": self.telemetry.current(),
+                "spectrum_agent": {"name": self.agent.name, "version": self.agent.version},
             }
 
     def latest_spectrum(self) -> dict:
