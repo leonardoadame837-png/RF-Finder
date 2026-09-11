@@ -3,22 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="RF Finder — passive spectrum analysis, signal detection, and field measurement. Software simulation is clearly separated from verified RF measurements.">
+<meta name="description" content="RF Finder — passive spectrum analysis, signal detection, field measurements, and phone sensor telemetry.">
 <title>RF Finder — Spectrum Intelligence</title>
 <style>
-:root{color-scheme:dark;--bg:#05080d;--panel:#0b1119;--line:#1b2a39;--text:#e7f6ff;--muted:#8aa0b2;--accent:#55d8ff;--good:#69e3ad;--warn:#ffd166}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#102434 0,#05080d 42%);color:var(--text);font:14px/1.6 Inter,system-ui,-apple-system,Segoe UI,sans-serif}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1180px;margin:auto;padding:28px 20px 60px}.nav{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:8px 0 42px}.brand{font-weight:800;letter-spacing:.14em}.brand span{color:var(--accent)}.navlinks{display:flex;gap:18px;color:var(--muted)}.hero{display:grid;grid-template-columns:1.35fr .65fr;gap:22px;align-items:stretch}.hero h1{font-size:clamp(42px,7vw,78px);line-height:.95;margin:0 0 22px;letter-spacing:-.05em}.hero p{font-size:18px;color:var(--muted);max-width:700px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}.btn{display:inline-block;border:1px solid var(--line);background:#0d1721;color:var(--text);padding:10px 14px;border-radius:9px}.btn.primary{background:var(--accent);color:#031017;border-color:var(--accent);font-weight:750}.status{border:1px solid var(--line);background:linear-gradient(180deg,#0c1620,#080d13);border-radius:16px;padding:20px;box-shadow:0 20px 60px #0006}.status h3{margin:0 0 14px}.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.badge{border:1px solid #285541;color:var(--good);background:#0b2119;padding:3px 8px;border-radius:999px;font-size:11px}.badge.sim{border-color:#6b5724;color:var(--warn);background:#211b0b}.section{margin-top:68px}.section h2{font-size:28px;margin:0 0 10px}.section>p{color:var(--muted);max-width:760px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}.card{background:#0a1017;border:1px solid var(--line);border-radius:14px;padding:20px}.card h3{margin:0 0 8px}.card p{color:var(--muted);margin:0}.metric{font-size:25px;font-weight:800;color:var(--accent)}.pipeline{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:22px}.step{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-weight:700}.step small{display:block;color:var(--muted);font-weight:400;margin-top:5px}.code{background:#03070b;border:1px solid var(--line);padding:16px;border-radius:10px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#b9e9f8}.notice{border-left:3px solid var(--warn);background:#17140b;padding:14px 16px;border-radius:8px;color:#d9c98e}.footer{margin-top:70px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}@media(max-width:850px){.hero,.grid{grid-template-columns:1fr}.pipeline{grid-template-columns:1fr 1fr}.navlinks{display:none}}
+:root{color-scheme:dark;--bg:#05080d;--panel:#0b1119;--line:#1b2a39;--text:#e7f6ff;--muted:#8aa0b2;--accent:#55d8ff;--good:#69e3ad;--warn:#ffd166}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#102434 0,#05080d 42%);color:var(--text);font:14px/1.6 Inter,system-ui,-apple-system,Segoe UI,sans-serif}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1180px;margin:auto;padding:28px 20px 60px}.nav{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:8px 0 42px}.brand{font-weight:800;letter-spacing:.14em}.brand span{color:var(--accent)}.navlinks{display:flex;gap:18px;color:var(--muted)}.hero{display:grid;grid-template-columns:1.35fr .65fr;gap:22px;align-items:stretch}.hero h1{font-size:clamp(42px,7vw,78px);line-height:.95;margin:0 0 22px;letter-spacing:-.05em}.hero p{font-size:18px;color:var(--muted);max-width:700px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}.btn{display:inline-block;border:1px solid var(--line);background:#0d1721;color:var(--text);padding:10px 14px;border-radius:9px;cursor:pointer}.btn.primary{background:var(--accent);color:#031017;border-color:var(--accent);font-weight:750}.status{border:1px solid var(--line);background:linear-gradient(180deg,#0c1620,#080d13);border-radius:16px;padding:20px;box-shadow:0 20px 60px #0006}.status h3{margin:0 0 14px}.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.badge{border:1px solid #285541;color:var(--good);background:#0b2119;padding:3px 8px;border-radius:999px;font-size:11px;white-space:nowrap}.badge.sim{border-color:#6b5724;color:var(--warn);background:#211b0b}.section{margin-top:68px}.section h2{font-size:28px;margin:0 0 10px}.section>p{color:var(--muted);max-width:760px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}.card{background:#0a1017;border:1px solid var(--line);border-radius:14px;padding:20px}.card h3{margin:0 0 8px}.card p{color:var(--muted);margin:0}.metric{font-size:25px;font-weight:800;color:var(--accent)}.pipeline{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:22px}.step{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-weight:700}.step small{display:block;color:var(--muted);font-weight:400;margin-top:5px}.code{background:#03070b;border:1px solid var(--line);padding:16px;border-radius:10px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#b9e9f8}.notice{border-left:3px solid var(--warn);background:#17140b;padding:14px 16px;border-radius:8px;color:#d9c98e}.sensor-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:20px}.sensor-value{font-size:24px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}.sensor-label{color:var(--muted);font-size:12px}.sensor-status{margin-top:14px;color:var(--muted)}.footer{margin-top:70px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}@media(max-width:850px){.hero,.grid,.sensor-grid{grid-template-columns:1fr}.pipeline{grid-template-columns:1fr 1fr}.navlinks{display:none}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<nav class="nav"><div class="brand">RF <span>FINDER</span></div><div class="navlinks"><a href="#overview">Overview</a><a href="#architecture">Architecture</a><a href="#start">Run locally</a><a href="#legal">Safety</a></div></nav>
+<nav class="nav"><div class="brand">RF <span>FINDER</span></div><div class="navlinks"><a href="#overview">Overview</a><a href="#sensors">Phone Sensors</a><a href="#architecture">Architecture</a><a href="#start">Run locally</a><a href="#legal">Safety</a></div></nav>
 <section class="hero" id="overview">
-<div><div class="badge sim">SIMULATION-FIRST • NO RF HARDWARE REQUIRED</div><h1>See the spectrum.<br>Measure with confidence.</h1><p>RF Finder is a local, receive-only spectrum analysis platform. It turns IQ samples into spectrum data, candidate detections, field observations, and investigation records — while keeping simulated data distinct from measurements captured by real hardware.</p><div class="actions"><a class="btn primary" href="https://github.com/leonardoadame837-png/RF-Finder">View source on GitHub</a><a class="btn" href="#start">Start locally</a></div></div>
-<div class="status"><h3>Measurement integrity</h3><div class="row"><span>Software simulator</span><span class="badge sim">SIMULATED</span></div><div class="row"><span>Hardware capture</span><span class="badge">VERIFIED WHEN CONNECTED</span></div><div class="row"><span>Private communications</span><span>Not decoded</span></div><div class="row"><span>RF interference</span><span>Receive-only</span></div></div>
+<div><div class="badge sim">SIMULATION-FIRST • NO RF HARDWARE REQUIRED</div><h1>See the spectrum.<br>Measure with confidence.</h1><p>RF Finder is a local, receive-only spectrum analysis platform. It turns IQ samples into spectrum data, candidate detections, field observations, and investigation records — while keeping simulated data distinct from measurements captured by real hardware.</p><div class="actions"><a class="btn primary" href="https://github.com/leonardoadame837-png/RF-Finder">View source on GitHub</a><a class="btn" href="#sensors">Enable phone sensors</a></div></div>
+<div class="status"><h3>Measurement integrity</h3><div class="row"><span>Software simulator</span><span class="badge sim">SIMULATED</span></div><div class="row"><span>Hardware capture</span><span class="badge">VERIFIED WHEN CONNECTED</span></div><div class="row"><span>Phone sensors</span><span class="badge">TELEMETRY ONLY</span></div><div class="row"><span>Private communications</span><span>Not decoded</span></div><div class="row"><span>RF interference</span><span>Receive-only</span></div></div>
 </section>
+<section class="section" id="sensors"><h2>Phone sensor telemetry</h2><p>Use the phone as a field telemetry device. Motion/orientation and location data can be read by the browser after you grant permission. These sensors do <strong>not</strong> measure radio-frequency energy; RF measurements still require an authorized RF capture source.</p><div class="actions"><button class="btn primary" id="enableSensors" type="button">Enable sensors</button><button class="btn" id="stopSensors" type="button">Stop sensors</button></div><div class="sensor-grid"><div class="card"><div class="sensor-label">Accelerometer X / Y / Z (m/s²)</div><div class="sensor-value" id="accel">— / — / —</div><div class="sensor-status" id="motionStatus">Motion permission not requested.</div></div><div class="card"><div class="sensor-label">Gyroscope α / β / γ (°/s)</div><div class="sensor-value" id="gyro">— / — / —</div><div class="sensor-status" id="gyroStatus">Orientation permission not requested.</div></div><div class="card"><div class="sensor-label">Device orientation α / β / γ (°)</div><div class="sensor-value" id="orientation">— / — / —</div><div class="sensor-status" id="orientationStatus">Waiting for sensor permission.</div></div><div class="card"><div class="sensor-label">Location latitude / longitude</div><div class="sensor-value" id="location">— / —</div><div class="sensor-status" id="locationStatus">Location permission not requested.</div></div></div><p class="sensor-status">Sensor telemetry stays in this page and is not presented as RF evidence. If you later connect an authorized RF source, its measurements can be associated with this field context.</p></section>
 <section class="section"><h2>What the platform does</h2><p>A focused pipeline for lawful spectrum observation and repeatable testing.</p><div class="grid"><div class="card"><div class="metric">FFT</div><h3>Spectrum analysis</h3><p>Transforms complex IQ samples into a measurable power spectrum with configurable sample rate, center frequency, and FFT size.</p></div><div class="card"><div class="metric">SNR</div><h3>Candidate detection</h3><p>Estimates a noise floor and identifies spectral regions above the configured detection threshold, including bandwidth and signal-to-noise metrics.</p></div><div class="card"><div class="metric">SQLite</div><h3>Field evidence</h3><p>Stores observations and investigation records locally so measurements can be reviewed, correlated, and exported later.</p></div></div></section>
-<section class="section" id="architecture"><h2>Architecture</h2><p>The RF engine stays independent from the assistant, authentication, database, and UI layers.</p><div class="pipeline"><div class="step">1. Source<small>Simulator or authorized capture source</small></div><div class="step">2. FFT<small>Power spectrum</small></div><div class="step">3. Detector<small>Noise + threshold</small></div><div class="step">4. Observation<small>Structured measurement</small></div><div class="step">5. UI/API<small>Field dashboard</small></div></div></section>
-<section class="section"><h2>Built for trustworthy testing</h2><div class="grid"><div class="card"><h3>Deterministic development</h3><p>The simulator lets CI and local development exercise the RF pipeline without an SDR, antenna, microphone, or cloud API.</p></div><div class="card"><h3>Authentication boundary</h3><p>Local accounts and process-local sessions protect RF operations. Assistant commands must pass an explicit tool and permission boundary.</p></div><div class="card"><h3>Hardware-ready design</h3><p>A source abstraction leaves room for receive-only SDR adapters without coupling hardware drivers to the analyzer or detector.</p></div></div></section>
+<section class="section" id="architecture"><h2>Architecture</h2><p>The RF engine stays independent from the assistant, authentication, database, UI, and phone telemetry layers.</p><div class="pipeline"><div class="step">1. Source<small>Simulator or authorized capture source</small></div><div class="step">2. FFT<small>Power spectrum</small></div><div class="step">3. Detector<small>Noise + threshold</small></div><div class="step">4. Observation<small>Structured measurement</small></div><div class="step">5. UI/API<small>Field dashboard + sensors</small></div></div></section>
+<section class="section"><h2>Built for trustworthy testing</h2><div class="grid"><div class="card"><h3>Deterministic development</h3><p>The simulator lets CI and local development exercise the RF pipeline without an SDR, antenna, microphone, or cloud API.</p></div><div class="card"><h3>Phone field telemetry</h3><p>Browser sensor APIs can provide motion, orientation, and location context on supported phones after explicit user permission.</p></div><div class="card"><h3>Hardware-ready design</h3><p>A source abstraction leaves room for receive-only RF adapters without coupling hardware drivers to the analyzer or detector.</p></div></div></section>
 <section class="section" id="start"><h2>Run RF Finder</h2><p>Python 3.11+ is the primary development target.</p><div class="code">git clone https://github.com/leonardoadame837-png/RF-Finder.git
 cd RF-Finder
 python -m venv .venv
@@ -27,7 +28,95 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 python app/main.py</div><p>Run the complete test suite with <code>python -m pytest -q</code>. The GitHub Actions matrix validates Python 3.11 and 3.12.</p></section>
 <section class="section" id="legal"><div class="notice"><strong>Lawful-use boundary.</strong> RF Finder is intended for passive spectrum analysis and authorized measurement. Do not use it to intercept private communications, decrypt protected traffic, identify private individuals, jam/interfere with RF systems, or conduct unauthorized surveillance.</div></section>
-<footer class="footer">RF Finder • Local spectrum analysis • Simulation clearly labeled • Receive-only architecture</footer>
+<footer class="footer">RF Finder • Local spectrum analysis • Phone telemetry • Simulation clearly labeled • Receive-only architecture</footer>
 </div>
+<script>
+(() => {
+  let motionHandler = null;
+  let orientationHandler = null;
+  let watchId = null;
+  const $ = id => document.getElementById(id);
+  const fmt = (v, digits=2) => Number.isFinite(v) ? v.toFixed(digits) : '—';
+
+  function setStatus(id, text) { $(id).textContent = text; }
+
+  function handleMotion(event) {
+    const a = event.accelerationIncludingGravity || event.acceleration;
+    const r = event.rotationRate;
+    if (a) $('accel').textContent = `${fmt(a.x)} / ${fmt(a.y)} / ${fmt(a.z)}`;
+    if (r) $('gyro').textContent = `${fmt(r.alpha)} / ${fmt(r.beta)} / ${fmt(r.gamma)}`;
+    setStatus('motionStatus', 'Live device-motion telemetry.');
+    if (r) setStatus('gyroStatus', 'Live rotation-rate telemetry.');
+  }
+
+  function handleOrientation(event) {
+    $('orientation').textContent = `${fmt(event.alpha)} / ${fmt(event.beta)} / ${fmt(event.gamma)}`;
+    setStatus('orientationStatus', 'Live device-orientation telemetry.');
+  }
+
+  function startLocation() {
+    if (!('geolocation' in navigator)) {
+      setStatus('locationStatus', 'Geolocation is not supported by this browser.');
+      return;
+    }
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        $('location').textContent = `${fmt(pos.coords.latitude, 5)} / ${fmt(pos.coords.longitude, 5)}`;
+        setStatus('locationStatus', `Live location • accuracy ±${fmt(pos.coords.accuracy, 0)} m.`);
+      },
+      err => setStatus('locationStatus', `Location unavailable: ${err.message}`),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    );
+  }
+
+  async function requestSensors() {
+    try {
+      const permissionTargets = [window.DeviceMotionEvent, window.DeviceOrientationEvent].filter(Boolean);
+      for (const target of permissionTargets) {
+        if (typeof target.requestPermission === 'function') {
+          const result = await target.requestPermission();
+          if (result !== 'granted') throw new Error('Motion/orientation permission was not granted.');
+        }
+      }
+
+      if (!('DeviceMotionEvent' in window)) {
+        setStatus('motionStatus', 'Device motion is not supported by this browser.');
+      } else {
+        motionHandler = handleMotion;
+        window.addEventListener('devicemotion', motionHandler);
+        setStatus('motionStatus', 'Listening for device-motion data…');
+      }
+
+      if (!('DeviceOrientationEvent' in window)) {
+        setStatus('orientationStatus', 'Device orientation is not supported by this browser.');
+      } else {
+        orientationHandler = handleOrientation;
+        window.addEventListener('deviceorientation', orientationHandler);
+        setStatus('orientationStatus', 'Listening for orientation data…');
+      }
+
+      startLocation();
+    } catch (error) {
+      setStatus('motionStatus', error.message || 'Sensor permission was not granted.');
+      setStatus('orientationStatus', 'Sensor access is waiting for permission.');
+    }
+  }
+
+  function stopSensors() {
+    if (motionHandler) window.removeEventListener('devicemotion', motionHandler);
+    if (orientationHandler) window.removeEventListener('deviceorientation', orientationHandler);
+    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    motionHandler = orientationHandler = null;
+    watchId = null;
+    setStatus('motionStatus', 'Motion telemetry stopped.');
+    setStatus('gyroStatus', 'Rotation telemetry stopped.');
+    setStatus('orientationStatus', 'Orientation telemetry stopped.');
+    setStatus('locationStatus', 'Location telemetry stopped.');
+  }
+
+  $('enableSensors').addEventListener('click', requestSensors);
+  $('stopSensors').addEventListener('click', stopSensors);
+})();
+</script>
 </body>
 </html>
