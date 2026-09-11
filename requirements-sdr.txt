@@ -1,0 +1,3 @@
+# Optional receive-only RTL-SDR support.
+# Install this only on a system where an RTL-SDR-compatible device is available.
+pyrtlsdr>=0.3.0
