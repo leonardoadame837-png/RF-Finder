@@ -20,16 +20,11 @@ from app.storage import ObservationStore
 
 
 class RFService:
-    """Continuous cross-platform RF monitoring service.
-
-    The same service can run behind a browser on Android, Windows, macOS, or
-    Linux. Device telemetry is optional context; only the capture source is
-    allowed to produce RF measurements.
-    """
+    """Continuous cross-platform RF monitoring service."""
 
     def __init__(self, config=default_config, source=None, scan_interval_s: float = 0.5):
         self.config = config
-        self.source = source or SignalSimulator(config)
+        self.source = source or self._build_source(config)
         self.analyzer = SpectrumAnalyzer(config)
         self.detector = SignalDetector(config)
         self.store = ObservationStore(config.database_path)
@@ -47,6 +42,21 @@ class RFService:
         self._lat = self._env_float("RF_FINDER_LAT")
         self._lon = self._env_float("RF_FINDER_LON")
         self._alt = self._env_float("RF_FINDER_ALT_M")
+
+    @staticmethod
+    def _build_source(config):
+        mode = str(config.source).lower()
+        if mode == "simulator":
+            return SignalSimulator(config)
+        if mode == "sdr":
+            from app.sources.sdr import RTLSDRSource
+
+            return RTLSDRSource(
+                config,
+                device_index=config.sdr_device_index,
+                gain=config.sdr_gain,
+            )
+        raise ValueError(f"Unsupported RF source: {config.source!r}. Use simulator or sdr.")
 
     @staticmethod
     def _env_float(name):
