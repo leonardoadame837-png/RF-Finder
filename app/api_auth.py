@@ -8,8 +8,23 @@ from app.auth import AuthManager, Session, User
 
 
 ROLE_PERMISSIONS = {
-    "user": frozenset({"rf.read", "rf.scan", "investigation.read", "investigation.write"}),
-    "admin": frozenset({"rf.read", "rf.scan", "investigation.read", "investigation.write", "admin.users"}),
+    "user": frozenset({
+        "rf.read",
+        "rf.scan",
+        "investigation.read",
+        "investigation.write",
+        "telemetry.read",
+        "telemetry.write",
+    }),
+    "admin": frozenset({
+        "rf.read",
+        "rf.scan",
+        "investigation.read",
+        "investigation.write",
+        "telemetry.read",
+        "telemetry.write",
+        "admin.users",
+    }),
 }
 
 
