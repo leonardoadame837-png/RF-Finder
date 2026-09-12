@@ -17,6 +17,7 @@ from app.dsp.detector import SignalDetector
 from app.observation import RFObservation, classify_observation
 from app.sources.base import source_provenance
 from app.sources.simulator import SignalSimulator
+from app.sources.types import SourceType, normalize_source_type
 from app.storage import ObservationStore
 
 
@@ -39,6 +40,7 @@ class RFService:
         self._frame_index = 0
         self._last_error: str | None = None
         self._latest = None
+        self._latest_detections = []
         self._waterfall = deque(maxlen=config.waterfall_history_frames)
         self._last_scan_at: str | None = None
         self._lat = self._env_float("RF_FINDER_LAT")
@@ -63,6 +65,10 @@ class RFService:
     @property
     def source_name(self) -> str:
         return getattr(self.source, "status", lambda: {"source": "unknown"})().get("source", "unknown")
+
+    @property
+    def source_type(self) -> SourceType:
+        return normalize_source_type(source_provenance(self.source)["source_type"])
 
     def start(self) -> None:
         with self._lock:
@@ -110,103 +116,109 @@ class RFService:
             if delay > 0:
                 self._stop.wait(delay)
 
-    def scan_once(self) -> dict:
-        iq = self.source.generate_frame()
+    def _process_iq(self, iq, source_type: SourceType, timestamp: str | None = None) -> tuple[dict, list]:
         frequencies, power, noise_floor = self.analyzer.analyze(iq)
-        frame_index = getattr(self.source, "frame_index", self._frame_index + 1)
-        detections = self.detector.detect(frequencies, power, noise_floor, frame_index)
-        provenance = source_provenance(self.source)
+        ts = timestamp or datetime.now(timezone.utc).isoformat()
+        detections = self.detector.detect(
+            frequencies, power, noise_floor, self._frame_index + 1,
+            source_type=source_type, timestamp=ts,
+        )
         spectrum = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": ts,
             "frequencies_hz": [float(x) for x in frequencies.tolist()],
             "power_db": [float(x) for x in power.tolist()],
             "noise_floor_db": float(noise_floor),
             "center_frequency_hz": float(self.config.center_frequency),
             "sample_rate_hz": float(self.config.sample_rate),
-            "provenance": provenance,
+            "source_type": source_type.value,
+            "provenance": {"source_type": source_type.value, "simulated": source_type is SourceType.SIMULATED,
+                            "verified_rf": source_type in {SourceType.IMPORTED_MEASUREMENT, SourceType.LIVE_MEASUREMENT}},
+            "detections": [d.to_dict() for d in detections],
         }
-        with self._lock:
-            self._frame_index = int(frame_index)
-            self._latest = spectrum
-            self._waterfall.append(spectrum["power_db"])
-            self._last_scan_at = spectrum["timestamp"]
+        return spectrum, detections
 
+    def _persist_detections(self, spectrum: dict, detections: list) -> None:
         for detection in detections:
             observation = RFObservation(
-                timestamp=spectrum["timestamp"],
-                frequency_hz=detection.center_frequency_hz,
-                peak_power_db=detection.peak_power_db,
-                noise_floor_db=detection.noise_floor_db,
-                snr_db=detection.snr_db,
-                bandwidth_hz=detection.bandwidth_hz,
-                latitude=self._lat,
-                longitude=self._lon,
-                altitude_m=self._alt,
-                source=self.source_name,
-                signal_class="unknown",
-                confidence=0.0,
-                evidence="simulated_signal" if provenance["simulated"] else "rf_measurement",
-                simulated=provenance["simulated"],
+                timestamp=spectrum["timestamp"], frequency_hz=detection.center_frequency_hz,
+                peak_power_db=detection.peak_power_db, noise_floor_db=detection.noise_floor_db,
+                snr_db=detection.snr_db, bandwidth_hz=detection.bandwidth_hz,
+                latitude=self._lat, longitude=self._lon, altitude_m=self._alt,
+                source=self.source_name, source_type=detection.source_type,
+                signal_class="unknown", confidence=detection.confidence,
+                evidence="simulated_signal" if detection.source_type == SourceType.SIMULATED.value else "rf_measurement",
             )
             self.store.add(classify_observation(observation))
 
-        return {"frame_index": frame_index, "detections": len(detections), "noise_floor_db": float(noise_floor)}
+    def scan_once(self) -> dict:
+        iq = self.source.generate_frame()
+        frame_index = getattr(self.source, "frame_index", self._frame_index + 1)
+        source_type = self.source_type
+        spectrum, detections = self._process_iq(iq, source_type)
+        with self._lock:
+            self._frame_index = int(frame_index)
+            self._latest = spectrum
+            self._latest_detections = [d.to_dict() for d in detections]
+            self._waterfall.append(spectrum["power_db"])
+            self._last_scan_at = spectrum["timestamp"]
+        self._persist_detections(spectrum, detections)
+        return {"frame_index": frame_index, "detections": len(detections), "noise_floor_db": spectrum["noise_floor_db"]}
+
+    def ingest_imported(self, iq, metadata: dict | None = None) -> dict:
+        """Process an explicitly imported measurement through the same DSP path."""
+        metadata = metadata or {}
+        source_type = normalize_source_type(metadata.get("source_type", SourceType.IMPORTED_MEASUREMENT.value))
+        if source_type is SourceType.SIMULATED:
+            raise ValueError("Imported measurement payload cannot be relabeled as SIMULATED")
+        if source_type is SourceType.UNKNOWN:
+            source_type = SourceType.IMPORTED_MEASUREMENT
+        spectrum, detections = self._process_iq(iq, source_type, metadata.get("timestamp"))
+        spectrum["center_frequency_hz"] = float(metadata.get("center_frequency_hz", self.config.center_frequency))
+        spectrum["sample_rate_hz"] = float(metadata.get("sample_rate_hz", self.config.sample_rate))
+        spectrum["sample_format"] = str(metadata.get("sample_format", "complex64"))
+        with self._lock:
+            self._latest = spectrum
+            self._latest_detections = [d.to_dict() for d in detections]
+            self._waterfall.append(spectrum["power_db"])
+            self._last_scan_at = spectrum["timestamp"]
+        self._persist_detections(spectrum, detections)
+        return spectrum
 
     def update_telemetry(self, payload: dict) -> dict:
-        """Accept optional browser/device telemetry from a trusted local client."""
         return self.telemetry.update(payload)
 
     def spectrum_agent_analysis(self) -> dict:
-        """Return grounded AI analysis of the latest measured spectrum."""
         spectrum = self.latest_spectrum()
         observations = self.observations(limit=30)
-        context = build_agent_context(spectrum, observations)
-        return self.agent.analyze(context)
+        return self.agent.analyze(build_agent_context(spectrum, observations))
 
     def status(self) -> dict:
         with self._lock:
             source_status = self.source.status() if hasattr(self.source, "status") else {}
             provenance = source_provenance(self.source)
-            return {
-                "running": self._running,
-                "platform": platform.system().lower(),
-                "client_architecture": "browser + local RF service",
-                "source": self.source_name,
-                "source_status": source_status,
-                "provenance": provenance,
-                "frame_index": self._frame_index,
-                "last_scan_at": self._last_scan_at,
-                "last_error": self._last_error,
-                "center_frequency_hz": self.config.center_frequency,
-                "sample_rate_hz": self.config.sample_rate,
-                "fft_size": self.config.fft_size,
-                "gps": {"latitude": self._lat, "longitude": self._lon, "altitude_m": self._alt},
-                "device_telemetry": self.telemetry.current(),
-                "spectrum_agent": {"name": self.agent.name, "version": self.agent.version},
-            }
+            return {"running": self._running, "platform": platform.system().lower(),
+                    "client_architecture": "browser + local RF service", "source": self.source_name,
+                    "source_status": source_status, "provenance": provenance, "source_type": provenance["source_type"],
+                    "frame_index": self._frame_index, "last_scan_at": self._last_scan_at,
+                    "last_error": self._last_error, "center_frequency_hz": self.config.center_frequency,
+                    "sample_rate_hz": self.config.sample_rate, "fft_size": self.config.fft_size,
+                    "gps": {"latitude": self._lat, "longitude": self._lon, "altitude_m": self._alt},
+                    "device_telemetry": self.telemetry.current(),
+                    "spectrum_agent": {"name": self.agent.name, "version": self.agent.version}}
 
     def latest_spectrum(self) -> dict:
         with self._lock:
-            return self._latest or {
-                "timestamp": None,
-                "frequencies_hz": [],
-                "power_db": [],
-                "noise_floor_db": None,
-                "center_frequency_hz": self.config.center_frequency,
-                "sample_rate_hz": self.config.sample_rate,
-                "provenance": source_provenance(self.source),
-            }
+            return self._latest or {"timestamp": None, "frequencies_hz": [], "power_db": [],
+                                    "noise_floor_db": None, "center_frequency_hz": self.config.center_frequency,
+                                    "sample_rate_hz": self.config.sample_rate, "source_type": self.source_type.value,
+                                    "provenance": source_provenance(self.source), "detections": []}
 
     def waterfall(self) -> dict:
         with self._lock:
-            return {
-                "frames": list(self._waterfall),
-                "frame_count": len(self._waterfall),
-                "fft_size": self.config.fft_size,
-                "sample_rate_hz": self.config.sample_rate,
-                "center_frequency_hz": self.config.center_frequency,
-                "provenance": source_provenance(self.source),
-            }
+            return {"frames": list(self._waterfall), "frame_count": len(self._waterfall),
+                    "fft_size": self.config.fft_size, "sample_rate_hz": self.config.sample_rate,
+                    "center_frequency_hz": self.config.center_frequency,
+                    "source_type": self.source_type.value, "provenance": source_provenance(self.source)}
 
     def observations(self, limit: int = 250) -> list[dict]:
         return self.store.recent(limit)
