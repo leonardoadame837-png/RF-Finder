@@ -1,13 +1,15 @@
 """Data models for RF observations and conservative tactical classification."""
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Optional
+
+from app.source_types import SourceType, normalize_source_type
 
 
 @dataclass
 class RFObservation:
-    """A timestamped RF measurement suitable for storage and map display."""
+    """A timestamped RF observation with explicit provenance."""
 
     timestamp: str
     frequency_hz: float
@@ -20,6 +22,7 @@ class RFObservation:
     altitude_m: Optional[float] = None
     bearing_deg: Optional[float] = None
     source: str = "unknown"
+    source_type: str = SourceType.UNKNOWN.value
     signal_class: str = "unknown"
     confidence: float = 0.0
     evidence: str = ""
@@ -29,16 +32,21 @@ class RFObservation:
     def now(cls, **kwargs) -> "RFObservation":
         return cls(timestamp=datetime.now(timezone.utc).isoformat(), **kwargs)
 
+    def __post_init__(self) -> None:
+        normalized = normalize_source_type(self.source_type if self.source_type != SourceType.UNKNOWN.value else self.source)
+        self.source_type = normalized.value
+        self.simulated = normalized is SourceType.SIMULATED
+        if self.simulated:
+            # A simulated observation can carry algorithmic confidence, but never
+            # masquerades as a verified/live measurement.
+            self.source = SourceType.SIMULATED.value
+
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 def classify_observation(observation: RFObservation) -> RFObservation:
-    """Apply conservative labels; RF characteristics alone do not prove intent or legality.
-
-    A drone label is only assigned when an upstream receiver explicitly supplies
-    Remote ID evidence. Ordinary 2.4/5.8 GHz energy is therefore not called a drone.
-    """
+    """Apply conservative labels; RF characteristics do not prove intent or legality."""
     evidence = observation.evidence.lower()
     if "remote_id" in evidence or "remote id" in evidence:
         observation.signal_class = "possible_drone_remote_id"
