@@ -1,13 +1,15 @@
-"""Data models for RF observations and conservative tactical classification."""
+"""Data models for conservative RF observations."""
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Optional
+
+from app.sources.types import SourceType, normalize_source_type
 
 
 @dataclass
 class RFObservation:
-    """A timestamped RF measurement suitable for storage and map display."""
+    """A timestamped RF observation with explicit provenance."""
 
     timestamp: str
     frequency_hz: float
@@ -19,7 +21,8 @@ class RFObservation:
     longitude: Optional[float] = None
     altitude_m: Optional[float] = None
     bearing_deg: Optional[float] = None
-    source: str = "unknown"
+    source: str = "unknown"  # legacy compatibility field
+    source_type: str = SourceType.UNKNOWN.value
     signal_class: str = "unknown"
     confidence: float = 0.0
     evidence: str = ""
@@ -29,21 +32,20 @@ class RFObservation:
     def now(cls, **kwargs) -> "RFObservation":
         return cls(timestamp=datetime.now(timezone.utc).isoformat(), **kwargs)
 
+    def __post_init__(self) -> None:
+        normalized = normalize_source_type(self.source_type if self.source_type != SourceType.UNKNOWN.value else self.source)
+        self.source_type = normalized.value
+        self.simulated = normalized is SourceType.SIMULATED
+        if self.source == "unknown":
+            self.source = normalized.value.lower()
+
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 def classify_observation(observation: RFObservation) -> RFObservation:
-    """Apply conservative labels; RF characteristics alone do not prove intent or legality.
-
-    A drone label is only assigned when an upstream receiver explicitly supplies
-    Remote ID evidence. Ordinary 2.4/5.8 GHz energy is therefore not called a drone.
-    """
-    evidence = observation.evidence.lower()
-    if "remote_id" in evidence or "remote id" in evidence:
-        observation.signal_class = "possible_drone_remote_id"
-        observation.confidence = max(observation.confidence, 0.85)
-    elif observation.snr_db >= 20.0:
+    """Classify measurable characteristics only; do not infer intent or identity."""
+    if observation.snr_db >= 20.0:
         observation.signal_class = "strong_rf_signal"
         observation.confidence = max(observation.confidence, 0.60)
     else:
