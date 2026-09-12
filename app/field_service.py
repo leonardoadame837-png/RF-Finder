@@ -57,7 +57,7 @@ class RFService:
     def _process_frame(self,iq,source_type,timestamp):
         frequencies,power,noise_floor=self.analyzer.analyze(iq); frame_index=getattr(self.source,"frame_index",self._frame_index+1)
         detections=self.detector.detect(frequencies,power,noise_floor,frame_index,source_type=source_type,timestamp=timestamp)
-        spectrum=self.analyzer.analyze_frame(iq,source_type,timestamp); spectrum["provenance"]={"source_type":source_type.value,"verified_rf":source_type.is_measurement,"simulated":source_type is SourceType.SIMULATED}; spectrum["detections"]=[d.to_dict() for d in detections]
+        spectrum=self.analyzer.analyze_frame(iq,source_type,timestamp); spectrum["power_db"]=spectrum["power_dbfs"]; spectrum["noise_floor_db"]=spectrum["noise_floor_dbfs"]; spectrum["provenance"]={"source":source_type.value,"source_type":source_type.value,"verified_rf":source_type.is_measurement,"simulated":source_type is SourceType.SIMULATED}; spectrum["detections"]=[d.to_dict() for d in detections]
         with self._lock:self._frame_index=int(frame_index); self._latest=spectrum; self._latest_detections=detections; self._waterfall.append(spectrum["power_dbfs"]); self._last_scan_at=timestamp
         return {"frame_index":frame_index,"detections":len(detections),"noise_floor_dbfs":float(noise_floor)}
     def scan_once(self):
@@ -75,7 +75,7 @@ class RFService:
         with self._lock:
             p=source_provenance(self.source); return {"running":self._running,"platform":platform.system().lower(),"client_architecture":"browser + local RF service","source":self.source_name,"source_type":p["source_type"],"source_status":self.source.status() if hasattr(self.source,"status") else {},"provenance":p,"frame_index":self._frame_index,"last_scan_at":self._last_scan_at,"last_error":self._last_error,"center_frequency_hz":self.config.center_frequency,"sample_rate_hz":self.config.sample_rate,"fft_size":self.config.fft_size,"gps":{"latitude":self._lat,"longitude":self._lon,"altitude_m":self._alt},"device_telemetry":self.telemetry.current(),"spectrum_agent":{"name":self.agent.name,"version":self.agent.version}}
     def latest_spectrum(self):
-        with self._lock:return self._latest or {"timestamp":None,"frequencies_hz":[],"power_dbfs":[],"noise_floor_dbfs":None,"center_frequency_hz":self.config.center_frequency,"sample_rate_hz":self.config.sample_rate,"source_type":self.source_type.value,"provenance":source_provenance(self.source),"detections":[]}
+        with self._lock:return self._latest or {"timestamp":None,"frequencies_hz":[],"power_dbfs":[],"power_db":[],"noise_floor_dbfs":None,"noise_floor_db":None,"center_frequency_hz":self.config.center_frequency,"sample_rate_hz":self.config.sample_rate,"source_type":self.source_type.value,"provenance":source_provenance(self.source),"detections":[]}
     def waterfall(self):
         with self._lock:return {"frames":list(self._waterfall),"frame_count":len(self._waterfall),"fft_size":self.config.fft_size,"sample_rate_hz":self.config.sample_rate,"center_frequency_hz":self.config.center_frequency,"source_type":self.source_type.value,"provenance":source_provenance(self.source)}
     def detections(self,limit=250):
