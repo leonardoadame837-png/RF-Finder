@@ -21,7 +21,7 @@ class RFObservation:
     longitude: Optional[float] = None
     altitude_m: Optional[float] = None
     bearing_deg: Optional[float] = None
-    source: str = "unknown"  # legacy compatibility field
+    source: str = "unknown"
     source_type: str = SourceType.UNKNOWN.value
     signal_class: str = "unknown"
     confidence: float = 0.0
@@ -44,8 +44,12 @@ class RFObservation:
 
 
 def classify_observation(observation: RFObservation) -> RFObservation:
-    """Classify measurable characteristics only; do not infer intent or identity."""
-    if observation.snr_db >= 20.0:
+    """Apply conservative labels; RF characteristics do not prove intent or legality."""
+    evidence = observation.evidence.lower()
+    if "remote_id" in evidence or "remote id" in evidence:
+        observation.signal_class = "possible_drone_remote_id"
+        observation.confidence = max(observation.confidence, 0.85)
+    elif observation.snr_db >= 20.0:
         observation.signal_class = "strong_rf_signal"
         observation.confidence = max(observation.confidence, 0.60)
     else:
