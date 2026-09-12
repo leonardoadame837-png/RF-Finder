@@ -1,14 +1,10 @@
-"""Optional receive-only SDR capture source.
-
-The SDR backend is intentionally optional: RF-Finder remains installable and
-fully testable without RF hardware. When an RTL-SDR-compatible receiver and
-its Python driver are available, this source supplies real complex I/Q samples
-into the same DSP pipeline used by the simulator.
-"""
+"""Optional receive-only SDR capture source."""
 
 from __future__ import annotations
 
 import numpy as np
+
+from app.source_types import SourceType
 
 
 class SDRUnavailableError(RuntimeError):
@@ -32,23 +28,15 @@ class RTLSDRSource:
         try:
             from rtlsdr import RtlSdr
         except ImportError as exc:
-            raise SDRUnavailableError(
-                "RTL-SDR support is optional. Install pyrtlsdr and the native "
-                "RTL-SDR driver before selecting --source sdr."
-            ) from exc
-
+            raise SDRUnavailableError("RTL-SDR support is optional. Install pyrtlsdr and the native RTL-SDR driver before selecting --source sdr.") from exc
         try:
             self._sdr = RtlSdr(self.device_index)
             self._sdr.sample_rate = self.config.sample_rate
             self._sdr.center_freq = self.config.center_frequency
-            if self.gain == "auto":
-                self._sdr.gain = "auto"
-            else:
-                self._sdr.gain = float(self.gain)
+            self._sdr.gain = "auto" if self.gain == "auto" else float(self.gain)
         except Exception as exc:
             self._close_device()
             raise SDRUnavailableError(f"Unable to open RTL-SDR device: {exc}") from exc
-
         self.frame_index = 0
         self.running = True
 
@@ -70,20 +58,9 @@ class RTLSDRSource:
             raise RuntimeError("SDR source is not running")
         samples = np.asarray(self._sdr.read_samples(self.config.fft_size), dtype=np.complex128)
         if samples.size != self.config.fft_size:
-            raise RuntimeError(
-                f"SDR returned {samples.size} samples; expected {self.config.fft_size}"
-            )
+            raise RuntimeError(f"SDR returned {samples.size} samples; expected {self.config.fft_size}")
         self.frame_index += 1
         return samples
 
     def status(self) -> dict:
-        return {
-            "active": self.running,
-            "source": "sdr",
-            "backend": "rtl-sdr",
-            "device_index": self.device_index,
-            "sample_rate_hz": self.config.sample_rate,
-            "center_frequency_hz": self.config.center_frequency,
-            "gain": self.gain,
-            "frame_index": self.frame_index,
-        }
+        return {"active": self.running, "source": "sdr", "source_type": SourceType.LIVE_MEASUREMENT.value, "backend": "rtl-sdr", "device_index": self.device_index, "sample_rate_hz": self.config.sample_rate, "center_frequency_hz": self.config.center_frequency, "gain": self.gain, "frame_index": self.frame_index}
