@@ -1,140 +1,97 @@
 # RF Finder
 
-**RF Finder** is a local RF signal detection and analysis application for Windows. It is designed to run against a simulator during development and later against supported SDR hardware.
+**RF Finder** is a local RF signal detection and analysis application. It uses one DSP pipeline for synthetic test data, imported samples, and optional live receiver measurements.
 
-## Current Status
+## Spectrum Analyzer
 
-**Stage 1 + Voice Assistant Foundation — ready for local testing.**
+The Spectrum Analyzer is available at `/spectrum` when the local field server is running. It provides a live frequency-vs-power spectrum, peak selection, noise-floor/SNR readouts, detection table, controls, and an IQ/sample import path.
 
-Implemented:
-- Synthetic IQ signal simulator
-- FFT-based spectrum analysis
-- Signal detection
-- Local password authentication
-- Process-local sessions
-- Controlled assistant tool gateway
-- Natural-language RF command parser
-- Assistant context and routing
-- Console assistant for hardware/cloud-free testing
-- Automated GitHub Actions tests
+### Source provenance
 
-The voice layer is intentionally provider-independent. The repository currently uses console input/output so it can be tested without microphone drivers, cloud credentials, or an AI API key. Microphone speech-to-text and text-to-speech providers can be added behind the existing interfaces without changing the RF engine.
+Every spectrum frame and detection carries exactly one source type:
 
-## Voice Assistant
+- `SIMULATED` — generated test IQ. Never a verified environmental measurement.
+- `IMPORTED_MEASUREMENT` — samples supplied by an import file. Hardware origin is not inferred.
+- `LIVE_MEASUREMENT` — samples received from a configured live measurement source.
+- `UNKNOWN` — provenance has not been established.
 
-Run the assistant with:
+A simulated frame cannot be upgraded to a verified measurement by the UI or storage layer.
 
-```bash
-python app/voice_bot.py
+### DSP and frequency axis
+
+Complex baseband IQ is windowed and transformed with the existing FFT analyzer. For sample rate `Fs` and center frequency `Fc`, the ordered bins run from `Fc - Fs/2` through the final FFT bin immediately below `Fc + Fs/2`; the upper Nyquist endpoint is not a distinct even-length FFT bin. Bin spacing is `Fs/N`.
+
+Power is reported on a normalized digital full-scale (`dBFS`) basis. This is not an RF dBm calibration. A real receiver calibration would require a known reference and receiver-specific calibration data.
+
+Noise floor is the median FFT-bin power, a robust central estimate. Detection SNR is:
+
+`SNR = peak_power_dBFS - noise_floor_dBFS`
+
+Detection confidence is an algorithmic score based on the measured SNR margin. It is **not** proof that a particular transmitter, person, device, activity, or legal status exists.
+
+### Import format
+
+The current import abstraction accepts JSON or CSV. JSON may contain:
+
+```json
+{
+  "samples": [{"real": 0.1, "imag": 0.0}],
+  "center_frequency_hz": 100000000,
+  "sample_rate_hz": 2000000,
+  "timestamp": "2026-01-01T00:00:00Z",
+  "sample_format": "complex128"
+}
 ```
 
-After authentication, try:
-
-```text
-start scan
-status
-stop scan
-what can you do
-```
-
-The assistant uses this flow:
-
-```text
-Input
-  |
-  v
-Command parser
-  |
-  v
-Intent
-  |
-  v
-Tool Registry
-  |
-  +---- permission check
-  |
-  v
-RF Finder service
-  |
-  v
-Structured result
-  |
-  v
-Assistant response
-```
-
-The assistant cannot execute arbitrary Python, shell commands, PowerShell, filesystem operations, or unregistered tools. Every operation must be explicitly registered and permission-checked.
-
-### Voice architecture
-
-```text
-app/assistant/
-├── assistant.py     # Orchestration + speech interfaces
-├── intents.py       # Intent model and command parsing
-├── router.py        # Intent-to-tool routing
-└── tools.py         # Controlled tool gateway and permissions
-
-app/voice_bot.py     # Development assistant entry point
-```
-
-### Planned voice providers
-
-The `SpeechInput` and `SpeechOutput` interfaces are provider-neutral. A future microphone/STT/TTS implementation should be added as a separate provider rather than embedded in the router or RF engine.
-
-No API key or cloud credential is required for the current console implementation.
-
-## Authentication
-
-RF Finder requires local authentication before the main RF processing pipeline starts.
-
-On first run, create an administrator account. Passwords are never stored in plaintext. The account metadata uses a random salt and PBKDF2-HMAC-SHA256 password hashing.
-
-Session tokens are generated with Python's `secrets` module, kept only in memory, and expire after one hour. Authentication is local and is not an OAuth server or network identity provider.
-
-Authentication files:
-- `app/auth.py` — account and session management
-- `tests/test_auth.py` — authentication tests
-- `data/auth/users.json` — local credential metadata; ignored by Git
-
-Security properties:
-- Salted PBKDF2-HMAC-SHA256
-- 600,000 password-hash iterations
-- Random per-account salt
-- Cryptographically random session tokens
-- Constant-time password comparison
-- Generic authentication errors
-- Credentials excluded from Git
+CSV accepts `real,imag` (or `i,q`) columns. The current analyzer requires exactly the configured FFT frame length. Imported data is classified as `IMPORTED_MEASUREMENT` unless metadata explicitly supplies another supported source type.
 
 ## Architecture
 
 ```text
-RF-Finder/
-├── app/
-│   ├── main.py
-│   ├── voice_bot.py
-│   ├── auth.py
-│   ├── config.py
-│   ├── assistant/
-│   │   ├── assistant.py
-│   │   ├── intents.py
-│   │   ├── router.py
-│   │   └── tools.py
-│   ├── sources/
-│   │   └── simulator.py
-│   ├── dsp/
-│   │   ├── analyzer.py
-│   │   └── detector.py
-│   ├── visualization/
-│   ├── database/
-│   └── gps/
-├── tests/
-├── data/
-├── .github/workflows/test.yml
-├── requirements.txt
-└── README.md
+Capture / Simulation / Import
+          |
+          v
+Sample / IQ normalization
+          |
+          v
+Existing DSP analyzer
+          |
+          +--> Noise-floor estimation
+          |
+          v
+Existing peak detector
+          |
+          v
+Source-aware Detection model
+          |
+          v
+Authenticated API / service state
+          |
+          v
+Spectrum Analyzer UI
+          |
+          +--> Detection table
+          +--> Field observation / investigation
 ```
 
-The architectural rule is: **AI/voice code may request approved RF Finder operations, but it does not own RF, DSP, database, GPS, authentication, or operating-system internals.**
+The AI/voice layer can request approved RF Finder operations but does not own the RF/DSP, database, GPS, authentication, or operating-system internals.
+
+## Authentication and RBAC
+
+RF Finder uses local authentication with salted PBKDF2-HMAC-SHA256 password hashing and process-local session tokens. API operations remain permission checked through the existing RBAC layer. Spectrum read operations require `rf.read`; scanning/import and field-observation creation require the existing write permissions.
+
+## Existing capabilities
+
+- Synthetic IQ signal simulator
+- FFT-based spectrum analysis
+- Signal detection and characterization
+- Source-aware spectrum/detection API
+- IQ/sample import abstraction
+- Local password authentication and RBAC
+- Investigation and field-observation workflow
+- Optional receive-only SDR source
+- Controlled assistant tool gateway
+- Automated GitHub Actions tests
 
 ## Installation
 
@@ -143,8 +100,6 @@ The architectural rule is: **AI/voice code may request approved RF Finder operat
 - Python 3.11+
 - pip
 - Windows is the primary target
-
-### Setup
 
 ```bash
 git clone https://github.com/leonardoadame837-png/RF-Finder.git
@@ -161,25 +116,23 @@ pip install -r requirements.txt
 python app/main.py
 ```
 
-The first run creates the local administrator account. Later runs require login before RF processing begins.
-
-## Run the Assistant
+For the field Spectrum Analyzer server:
 
 ```bash
-python app/voice_bot.py
+python -m app.field
 ```
 
-The current assistant is a **console test harness**, not yet microphone voice input. This keeps the project deterministic and dependency-light while the RF and security layers are validated.
+Then open `/spectrum` on the server port after authentication.
 
 ## Test
 
-Run all tests locally:
+Run the complete suite:
 
 ```bash
 python -m pytest -q
 ```
 
-GitHub Actions automatically runs the test suite on pushes to `main` and pull requests against `main` using Python 3.11 and 3.12.
+Tests cover FFT frequency-axis correctness, complex IQ processing, noise-floor estimation, strong/noise-only detection, multiple peaks, SNR, source labeling, invalid input, serialization, service lifecycle, and investigation persistence.
 
 ## Configuration
 
@@ -190,59 +143,19 @@ Configuration is centralized in `app/config.py`.
 | `sample_rate` | 2 MS/s | Complex IQ sample rate |
 | `center_frequency` | 100 MHz | RF center frequency |
 | `fft_size` | 2048 | FFT transform size |
-| `detection_threshold_db` | 6 dB | Detection threshold above noise |
+| `detection_threshold_db` | 6 dB | Configured minimum detection margin; detector retains a 15 dB practical floor |
 | `minimum_signal_bandwidth_hz` | 10 kHz | Minimum detected bandwidth |
 | `waterfall_history_frames` | 256 | Waterfall display depth |
 | `database_path` | `data/database/rf_finder.db` | SQLite database location |
+| `simulation_seed` | 12345 | Deterministic simulator seed |
 
-## Development Roadmap
+## Measurement limitations
 
-### v0.3 — Voice Assistant Foundation ✓
-- [x] Assistant orchestration
-- [x] Intent parser
-- [x] Tool registry
-- [x] Permission boundary
-- [x] Conversation context
-- [x] Console development provider
-- [x] Assistant tests
-- [x] GitHub Actions CI
-
-### v0.4 — Desktop Interface
-- [ ] Live spectrum display
-- [ ] Scrolling waterfall
-- [ ] Signal table
-- [ ] Login screen
-- [ ] Assistant panel
-- [ ] Push-to-talk controls
-
-### v0.5 — RF Hardware
-- [ ] SDR abstraction
-- [ ] RTL-SDR source
-- [ ] Device discovery/status
-- [ ] Hardware error handling
-
-### v0.6 — Data and Location
-- [ ] SQLite measurement service
-- [ ] CSV export
-- [ ] GPS integration
-- [ ] Location-tagged measurements
-
-### v0.7 — RF Intelligence
-- [ ] Signal classification
-- [ ] Frequency database
-- [ ] Advanced filtering
-- [ ] Measurement summaries
-- [ ] Voice explanations of detected signals
+RF Finder reports measurable digital signal characteristics from the supplied sample stream. It does not by itself establish the physical identity or location of a transmitter, intent, legality, surveillance, or malicious activity. Phone/device telemetry is not an RF measurement source. Imported data retains its supplied metadata and is not automatically attributed to SDR hardware.
 
 ## Legal Notice
 
-RF Finder is a spectrum analysis and measurement application intended for lawful use.
-
-Do not use it for interception of private communications, decryption of encrypted signals, identification of private individuals, unauthorized RF interference, or other unlawful activity. Comply with applicable RF regulations.
-
-## License
-
-TBD
+RF Finder is intended for lawful spectrum analysis and measurement. Do not use it for interception of private communications, unauthorized decryption, unauthorized RF interference, or other unlawful activity. Comply with applicable RF regulations.
 
 ## References
 
