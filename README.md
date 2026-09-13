@@ -76,6 +76,43 @@ The detection object powering the graph also powers the detection table and obse
 
 The source-aware model reserves `IMPORTED_MEASUREMENT` for externally supplied samples. Imported metadata should contain `center_frequency_hz`, `sample_rate_hz`, `timestamp`, and `sample_format` alongside the complex samples. Import provenance is not changed to `LIVE_MEASUREMENT` unless the capture source explicitly establishes that provenance. RF Finder does not claim imported data came from SDR hardware merely because it contains IQ samples.
 
+## Map Layers
+
+RF Finder now has a provider-independent MapLibre map-layer registry in `app/map_layers.py` and a multi-layer browser workspace at `docs/map-layers.html`. MapLibre is the rendering engine; geographic providers are replaceable and are not coupled to RF evidence.
+
+Available default providers:
+
+- **OpenStreetMap** — general street/context map.
+- **USGS Imagery** — U.S. aerial/satellite-style imagery from The National Map.
+- **USGS Topographic** — U.S. topographic context.
+- **USGS Shaded Relief** — U.S. elevation-derived shaded relief.
+- **Local / Offline Tiles** — disabled by default and intended for a local tile service.
+
+The viewer supports a **globe projection**, RF measurement-position markers, receiver tracks, and localization heatmap overlays. MapLibre supports raster sources, globe projection, and style/layer composition through its style specification. citeturn0search0turn0search1turn0search7
+
+The application intentionally does **not** bundle Google Earth or Google's Photorealistic 3D imagery. Those services have separate Google licensing/API requirements. A future provider adapter can be added without changing the RF evidence model.
+
+### Map configuration
+
+Private/local installations can override providers with environment variables:
+
+```text
+RF_FINDER_OSM_TILES
+RF_FINDER_USGS_IMAGERY_TILES
+RF_FINDER_USGS_TOPO_TILES
+RF_FINDER_USGS_RELIEF_TILES
+RF_FINDER_LOCAL_TILES
+RF_FINDER_DEM_TILES
+```
+
+`RF_FINDER_DEM_TILES` is intentionally empty by default. A true 3D terrain surface requires a raster-DEM source; shaded-relief imagery is not treated as elevation data.
+
+OpenStreetMap data is free to use, but the public OSM tile service has usage requirements including visible attribution, caching, and no bulk/offline prefetching. RF Finder therefore keeps the tile URL configurable and does not implement bulk downloading from OSM. citeturn0search2
+
+USGS The National Map provides public-domain national geospatial data and web services, including imagery, topography, elevation, and shaded relief. citeturn2search0turn2search6
+
+The map overlay contract remains evidence-aware: a receiver position is a measurement location, not proof of transmitter location, identity, intent, legality, or attribution.
+
 ## Authentication and RBAC
 
 RF Finder retains the existing local authentication and permission boundaries. Spectrum reads require `rf.read`; starting/stopping the live service requires `rf.scan`; investigation creation/attachment requires `investigation.write`. No anonymous path is added around these boundaries.
@@ -92,7 +129,7 @@ Python 3.11+ is the primary development target.
 git clone https://github.com/leonardoadame837-png/RF-Finder.git
 cd RF-Finder
 python -m venv venv
-venv\Scripts\activate
+venv\\Scripts\\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -109,7 +146,7 @@ For the authenticated field service and Spectrum Analyzer API:
 python -m app.tactical_server
 ```
 
-Then open the service's `/tactical` route. The standalone Spectrum Analyzer page is also available as `docs/spectrum.html` when served from an environment that can reach the authenticated API.
+Then open the service's `/tactical` route. The standalone Spectrum Analyzer page is also available as `docs/spectrum.html` when served from an environment that can reach the authenticated API. The Map Layers workspace is `docs/map-layers.html` and is designed to use the same authenticated RF API when hosted by the local application.
 
 ## Test
 
