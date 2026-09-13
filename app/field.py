@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import argparse
 import socket
+import threading
 
+from .api_auth import APIAuth
+from .auth import AuthManager
 from .config import Config
 from .field_service import RFService
-from .tactical_server import create_server
+from .spectrum_server import create_server as create_spectrum_server
+from .tactical_server import create_server as create_tactical_server
 
 
 def _local_ip() -> str:
@@ -26,6 +30,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="RF-Finder cross-platform field monitor")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address; 0.0.0.0 allows LAN clients")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--spectrum-port", type=int, default=8090, help="Spectrum Analyzer HTTP port")
     parser.add_argument("--interval", type=float, default=0.5)
     parser.add_argument("--source", choices=("simulator", "sdr"), default="simulator")
     parser.add_argument("--center-frequency", type=int, default=100_000_000, help="Center frequency in Hz")
@@ -43,28 +48,47 @@ def main() -> None:
     )
     service = RFService(config=config, scan_interval_s=args.interval)
     service.start()
-    server = create_server(service, host=args.host, port=args.port)
+
+    # Share one RFService and one authentication manager between the tactical
+    # dashboard and Spectrum Analyzer. This keeps both UIs on the same scan
+    # state, observations, credentials, and RBAC boundary.
+    auth = APIAuth(AuthManager())
+    tactical_server = create_tactical_server(service, host=args.host, port=args.port, auth=auth)
+    spectrum_server = create_spectrum_server(service, host=args.host, port=args.spectrum_port, auth=auth)
+
+    spectrum_thread = threading.Thread(
+        target=spectrum_server.serve_forever,
+        name="rf-finder-spectrum-server",
+        daemon=True,
+    )
+    spectrum_thread.start()
 
     print("RF-Finder Field Monitor")
     print(f"Platform: {service.status()['platform']}")
     print(f"Source: {service.source_name}")
     print(f"Center frequency: {config.center_frequency / 1e6:.6f} MHz")
     print(f"Sample rate: {config.sample_rate / 1e6:.3f} MS/s")
-    print(f"Local dashboard: http://127.0.0.1:{args.port}/tactical")
+    print(f"Local tactical dashboard: http://127.0.0.1:{args.port}/tactical")
+    print(f"Local Spectrum Analyzer: http://127.0.0.1:{args.spectrum_port}/spectrum")
     if args.host == "0.0.0.0":
-        print(f"Phone/LAN dashboard: http://{_local_ip()}:{args.port}/tactical")
+        local_ip = _local_ip()
+        print(f"Phone/LAN tactical dashboard: http://{local_ip}:{args.port}/tactical")
+        print(f"Phone/LAN Spectrum Analyzer: http://{local_ip}:{args.spectrum_port}/spectrum")
     else:
         print(f"Dashboard: http://{args.host}:{args.port}/tactical")
+        print(f"Spectrum Analyzer: http://{args.host}:{args.spectrum_port}/spectrum")
     print("Phone sensors remain telemetry-only; RF measurements come from the configured capture source.")
     print("Press Ctrl+C to stop.")
 
     try:
-        server.serve_forever()
+        tactical_server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        spectrum_server.shutdown()
+        spectrum_server.server_close()
         service.stop()
-        server.server_close()
+        tactical_server.server_close()
 
 
 if __name__ == "__main__":
