@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RF Finder — Map Layers</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.9.0/dist/maplibre-gl.css" />
+  <style>
+    :root{color-scheme:dark}html,body{margin:0;height:100%;background:#071019;color:#d8f4ff;font:13px Arial,sans-serif}#map{position:absolute;inset:0}.toolbar{position:absolute;z-index:10;top:12px;left:12px;width:310px;max-height:calc(100vh - 24px);overflow:auto;background:rgba(7,16,25,.94);border:1px solid #24465d;border-radius:8px;padding:12px;box-shadow:0 8px 30px #0008}.toolbar h2{font-size:16px;margin:0 0 4px;color:#62d8ff}.toolbar h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#9bb8c7;margin:14px 0 7px}.row{display:flex;gap:7px;align-items:center;margin:6px 0}.row input{accent-color:#62d8ff}.btn{background:#102a3b;color:#d8f4ff;border:1px solid #2c607d;padding:6px 9px;border-radius:4px;cursor:pointer}.btn:hover{background:#173b52}.notice{color:#9bb8c7;line-height:1.4;font-size:11px}.status{margin-top:8px;padding:7px;border:1px solid #19394c;border-radius:5px}.attribution{position:absolute;z-index:9;right:8px;bottom:8px;background:#071019dd;padding:4px 7px;border-radius:4px;font-size:10px}.popup{font-family:Arial,sans-serif}.legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}.green{background:#35d07f}.yellow{background:#ffd34d}.orange{background:#ff9f43}.red{background:#ff5b5b}
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<aside class="toolbar">
+  <h2>RF FINDER / MAP LAYERS</h2>
+  <div class="notice">Map context is separate from RF evidence. Receiver positions show where a measurement was made; they do not prove the transmitter's exact location, identity, intent, or legal status.</div>
+
+  <h3>Base map</h3>
+  <label class="row"><input type="radio" name="base" value="osm" checked> OpenStreetMap</label>
+  <label class="row"><input type="radio" name="base" value="usgs-imagery"> USGS satellite / imagery</label>
+  <label class="row"><input type="radio" name="base" value="usgs-topo"> USGS topographic</label>
+  <label class="row"><input type="radio" name="base" value="usgs-relief"> USGS shaded relief</label>
+  <label class="row"><input type="radio" name="base" value="local"> Local / offline tiles</label>
+
+  <h3>View</h3>
+  <label class="row"><input id="globe" type="checkbox"> 3D globe projection</label>
+  <button class="btn" id="fit">Fit RF measurements</button>
+
+  <h3>RF overlays</h3>
+  <label class="row"><input id="obs" type="checkbox" checked> Measurement positions</label>
+  <label class="row"><input id="tracks" type="checkbox"> Receiver tracks</label>
+  <label class="row"><input id="heatmap" type="checkbox"> Localization heatmap</label>
+
+  <h3>Legend</h3>
+  <div><span class="legend-dot green"></span>normal &nbsp; <span class="legend-dot yellow"></span>unusual</div>
+  <div><span class="legend-dot orange"></span>persistent &nbsp; <span class="legend-dot red"></span>high priority</div>
+
+  <div class="status" id="status">Map initializing…</div>
+  <div class="notice" style="margin-top:8px">Google Earth / Photorealistic 3D is intentionally not enabled. Add a separately licensed provider through the map registry if you choose to use one.</div>
+</aside>
+<div class="attribution" id="attribution">© OpenStreetMap contributors</div>
+<script type="module">
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@6.9.0/dist/maplibre-gl.mjs';
+
+const API_BASE = window.RF_FINDER_API_BASE || 'http://127.0.0.1:8000';
+const registry = {
+  osm: {url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution:'© OpenStreetMap contributors', maxzoom:19},
+  'usgs-imagery': {url:'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', attribution:'USGS', maxzoom:19},
+  'usgs-topo': {url:'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', attribution:'USGS', maxzoom:19},
+  'usgs-relief': {url:'https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}', attribution:'USGS', maxzoom:19},
+  local: {url:'http://127.0.0.1:8787/tiles/{z}/{x}/{y}.png', attribution:'RF Finder local tiles', maxzoom:22}
+};
+
+const map = new maplibregl.Map({container:'map', center:[-117.16,32.72], zoom:9, style:{version:8,sources:{},layers:[{id:'background',type:'background',paint:{'background-color':'#071019'}}]}});
+map.addControl(new maplibregl.NavigationControl(),'top-right');
+map.addControl(new maplibregl.FullscreenControl(),'top-right');
+let observations=[];
+
+function setStatus(text){document.getElementById('status').textContent=text}
+function esc(v){return String(v??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[c]))}
+function fmtHz(h){return Number(h)>=1e9?(Number(h)/1e9).toFixed(3)+' GHz':(Number(h)/1e6).toFixed(3)+' MHz'}
+function markerColor(q){if(q.simulated || q.source_type==='SIMULATED')return '#888';if(Number(q.snr_db)>=35)return '#ff5b5b';if(Number(q.snr_db)>=25)return '#ff9f43';if(Number(q.snr_db)>=20)return '#ffd34d';return '#35d07f'}
+
+function installBase(id){
+  const p=registry[id];
+  if(!map.isStyleLoaded()) return;
+  if(map.getLayer('rf-base')) map.removeLayer('rf-base');
+  if(map.getSource('rf-base')) map.removeSource('rf-base');
+  map.addSource('rf-base',{type:'raster',tiles:[p.url],tileSize:256,maxzoom:p.maxzoom});
+  map.addLayer({id:'rf-base',type:'raster',source:'rf-base',paint:{'raster-opacity':1}});
+  document.getElementById('attribution').textContent=p.attribution;
+}
+function addRFSource(){
+  if(!map.getSource('rf-observations')){
+    map.addSource('rf-observations',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:'rf-observation-circles',type:'circle',source:'rf-observations',paint:{'circle-radius':7,'circle-color':['get','color'],'circle-stroke-color':'#071019','circle-stroke-width':2,'circle-opacity':.9}});
+  }
+}
+function renderObservations(){
+  addRFSource();
+  const features=observations.filter(q=>q.latitude!=null&&q.longitude!=null).map(q=>({type:'Feature',geometry:{type:'Point',coordinates:[Number(q.longitude),Number(q.latitude)]},properties:{id:q.id,color:markerColor(q),frequency:fmtHz(q.frequency_hz),snr:Number(q.snr_db||0).toFixed(1),power:Number(q.peak_power_db||0).toFixed(1),source:q.source_type||(q.simulated?'SIMULATED':'UNKNOWN'),timestamp:q.timestamp||''}}));
+  map.getSource('rf-observations').setData({type:'FeatureCollection',features});
+}
+async function loadObservations(){
+  try{
+    const r=await fetch(API_BASE+'/api/observations?limit=1000',{headers:window.RF_FINDER_TOKEN?{Authorization:'Bearer '+window.RF_FINDER_TOKEN}:{}});
+    if(!r.ok) throw new Error('RF API '+r.status);
+    observations=await r.json(); renderObservations(); setStatus(`${observations.length} RF observations loaded`);
+  }catch(e){setStatus('Map ready; RF API unavailable until RF Finder is running and authenticated.');}
+}
+
+map.on('load',()=>{installBase('osm');addRFSource();loadObservations();});
+map.on('click','rf-observation-circles',e=>{
+  const p=e.features?.[0]?.properties;if(!p)return;
+  new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<div class="popup"><b>${esc(p.source)}</b><br>${esc(p.frequency)}<br>SNR ${esc(p.snr)} dB · Power ${esc(p.power)} dB<br>${esc(p.timestamp)}<br>Receiver position only</div>`).addTo(map);
+});
+
+for(const radio of document.querySelectorAll('input[name="base"]')) radio.addEventListener('change',e=>installBase(e.target.value));
+document.getElementById('globe').addEventListener('change',e=>map.setProjection(e.target.checked?{type:'globe'}:{type:'mercator'}));
+document.getElementById('obs').addEventListener('change',e=>{if(map.getLayer('rf-observation-circles'))map.setLayoutProperty('rf-observation-circles','visibility',e.target.checked?'visible':'none')});
+document.getElementById('fit').addEventListener('click',()=>{const pts=observations.filter(q=>q.latitude!=null&&q.longitude!=null);if(!pts.length)return;const b=new maplibregl.LngLatBounds();pts.forEach(q=>b.extend([Number(q.longitude),Number(q.latitude)]));map.fitBounds(b,{padding:80,maxZoom:15})});
+
+document.getElementById('tracks').addEventListener('change',async e=>{if(!e.target.checked){if(map.getLayer('rf-tracks'))map.setLayoutProperty('rf-tracks','visibility','none');return}try{const r=await fetch(API_BASE+'/api/localization/tracks',{headers:window.RF_FINDER_TOKEN?{Authorization:'Bearer '+window.RF_FINDER_TOKEN}:{}});const d=await r.json();const features=(d.tracks||[]).map(t=>({type:'Feature',geometry:{type:'LineString',coordinates:(t.points||[]).map(p=>[p.longitude,p.latitude])},properties:{}}));if(!map.getSource('rf-tracks')){map.addSource('rf-tracks',{type:'geojson',data:{type:'FeatureCollection',features}});map.addLayer({id:'rf-tracks',type:'line',source:'rf-tracks',paint:{'line-color':'#62d8ff','line-width':2,'line-opacity':.8}})}else{map.getSource('rf-tracks').setData({type:'FeatureCollection',features});map.setLayoutProperty('rf-tracks','visibility','visible')}}catch(_){setStatus('Receiver tracks unavailable.')}});
+
+document.getElementById('heatmap').addEventListener('change',async e=>{if(!e.target.checked){if(map.getLayer('rf-heatmap'))map.setLayoutProperty('rf-heatmap','visibility','none');return}try{const r=await fetch(API_BASE+'/api/localization/heatmap',{headers:window.RF_FINDER_TOKEN?{Authorization:'Bearer '+window.RF_FINDER_TOKEN}:{}});const d=await r.json();const features=(d.cells||[]).map(c=>({type:'Feature',geometry:{type:'Point',coordinates:[c.longitude,c.latitude]},properties:{weight:c.count||c.measurement_count||1}}));if(!map.getSource('rf-heatmap')){map.addSource('rf-heatmap',{type:'geojson',data:{type:'FeatureCollection',features}});map.addLayer({id:'rf-heatmap',type:'heatmap',source:'rf-heatmap',paint:{'heatmap-weight':['get','weight'],'heatmap-radius':28,'heatmap-opacity':.7}})}else{map.getSource('rf-heatmap').setData({type:'FeatureCollection',features});map.setLayoutProperty('rf-heatmap','visibility','visible')}}catch(_){setStatus('Heatmap unavailable.')}});
+</script>
+</body>
+</html>
