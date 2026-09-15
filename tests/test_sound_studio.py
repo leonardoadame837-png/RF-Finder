@@ -20,7 +20,7 @@ def test_sound_studio_exposes_core_audio_tools():
         "Listen to Selected",
         "Audio File",
         "AudioContext",
-        "AnalyserNode",
+        "createAnalyser",
         "bandpass",
     ):
         assert marker in text
