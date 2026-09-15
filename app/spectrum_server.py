@@ -1,6 +1,6 @@
 """Authenticated Spectrum Analyzer HTTP service.
 
-Serves the existing browser analyzer and exposes the same RFService/DSP pipeline;
+Serves the browser analyzer and exposes the same RFService/DSP pipeline;
 it does not implement a second FFT or detector.
 """
 
@@ -87,6 +87,8 @@ def create_server(service: RFService, host: str = "127.0.0.1", port: int = 8090,
                     self._require("rf.read"); return self._send(service.status())
                 if path == "/api/spectrum":
                     self._require("rf.read"); return self._send(service.latest_spectrum())
+                if path == "/api/waterfall":
+                    self._require("rf.read"); return self._send(service.waterfall())
                 if path == "/api/observations":
                     self._require("rf.read"); return self._send(service.observations())
                 return self._send({"error": "not found"}, 404)
