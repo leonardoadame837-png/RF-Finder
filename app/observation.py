@@ -26,6 +26,8 @@ class RFObservation:
     signal_class: str = "unknown"
     confidence: float = 0.0
     evidence: str = ""
+    classification_evidence: str = ""
+    encryption_status: str = "unknown"
     simulated: bool = False
 
     @classmethod
