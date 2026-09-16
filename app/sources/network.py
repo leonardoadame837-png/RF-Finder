@@ -37,6 +37,8 @@ class RTLTCPSource:
         self._socket: socket.socket | None = None
         self._server_info: dict = {}
         self._last_timestamp: str | None = None
+        self._center_frequency_hz = float(config.center_frequency)
+        self._sample_rate_hz = float(config.sample_rate)
 
     def start(self) -> None:
         if self.running:
@@ -67,6 +69,8 @@ class RTLTCPSource:
                 f"Unable to connect to rtl_tcp at {self.host}:{self.port}: {exc}"
             ) from exc
         self._socket = sock
+        self._center_frequency_hz = float(self.config.center_frequency)
+        self._sample_rate_hz = float(self.config.sample_rate)
         self.frame_index = 0
         self.running = True
 
@@ -102,9 +106,11 @@ class RTLTCPSource:
 
     def _set_frequency(self, sock: socket.socket, frequency_hz: int) -> None:
         sock.sendall(self._command(0x01, frequency_hz))
+        self._center_frequency_hz = float(frequency_hz)
 
     def _set_sample_rate(self, sock: socket.socket, sample_rate_hz: int) -> None:
         sock.sendall(self._command(0x02, sample_rate_hz))
+        self._sample_rate_hz = float(sample_rate_hz)
 
     def _set_gain(self, sock: socket.socket, gain: str | float) -> None:
         # rtl_tcp command 0x03 selects gain mode; 0 enables automatic gain.
@@ -127,6 +133,11 @@ class RTLTCPSource:
 
     def set_frequency(self, frequency_hz: int) -> None:
         self._send_command(0x01, frequency_hz)
+        self._center_frequency_hz = float(frequency_hz)
+
+    def set_sample_rate(self, sample_rate_hz: int) -> None:
+        self._send_command(0x02, sample_rate_hz)
+        self._sample_rate_hz = float(sample_rate_hz)
 
     def status(self) -> dict:
         return {
@@ -135,8 +146,8 @@ class RTLTCPSource:
             "backend": "rtl_tcp",
             "host": self.host,
             "port": self.port,
-            "sample_rate_hz": self.config.sample_rate,
-            "center_frequency_hz": self.config.center_frequency,
+            "sample_rate_hz": self._sample_rate_hz,
+            "center_frequency_hz": self._center_frequency_hz,
             "gain": self.config.sdr_gain,
             "frame_index": self.frame_index,
             "last_timestamp": self._last_timestamp,
