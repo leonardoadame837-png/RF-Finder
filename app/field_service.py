@@ -64,6 +64,15 @@ class RFService:
     def source_type(self) -> SourceType:
         return normalize_source_type(source_provenance(self.source)["source_type"])
 
+    def _capture_metadata(self) -> dict:
+        """Read live capture metadata from the source when it exposes it."""
+        status = self.source.status() if hasattr(self.source, "status") else {}
+        return {
+            "timestamp": status.get("last_timestamp"),
+            "center_frequency_hz": status.get("center_frequency_hz", self.config.center_frequency),
+            "sample_rate_hz": status.get("sample_rate_hz", self.config.sample_rate),
+        }
+
     def start(self) -> None:
         with self._lock:
             if self._running: return
@@ -121,7 +130,10 @@ class RFService:
 
     def scan_once(self) -> dict:
         iq = self.source.generate_frame(); frame_index = getattr(self.source, "frame_index", self._frame_index + 1)
-        spectrum, detections = self._process_iq(iq, self.source_type)
+        metadata = self._capture_metadata()
+        spectrum, detections = self._process_iq(
+            iq, self.source_type, metadata["timestamp"], metadata["center_frequency_hz"], metadata["sample_rate_hz"]
+        )
         with self._lock:
             self._frame_index = int(frame_index); self._latest = spectrum; self._latest_detections = [d.to_dict() for d in detections]
             self._waterfall.append(spectrum["power_db"]); self._last_scan_at = spectrum["timestamp"]
@@ -155,7 +167,8 @@ class RFService:
             return {"running": self._running, "platform": platform.system().lower(), "client_architecture": "browser + local RF service",
                     "source": self.source_name, "source_status": source_status, "provenance": provenance, "source_type": provenance["source_type"],
                     "frame_index": self._frame_index, "last_scan_at": self._last_scan_at, "last_error": self._last_error,
-                    "center_frequency_hz": self.config.center_frequency, "sample_rate_hz": self.config.sample_rate, "fft_size": self.config.fft_size,
+                    "center_frequency_hz": source_status.get("center_frequency_hz", self.config.center_frequency),
+                    "sample_rate_hz": source_status.get("sample_rate_hz", self.config.sample_rate), "fft_size": self.config.fft_size,
                     "gps": {"latitude": self._lat, "longitude": self._lon, "altitude_m": self._alt}, "device_telemetry": self.telemetry.current(),
                     "spectrum_agent": {"name": self.agent.name, "version": self.agent.version}}
 
@@ -167,8 +180,10 @@ class RFService:
 
     def waterfall(self) -> dict:
         with self._lock:
+            source_status = self.source.status() if hasattr(self.source, "status") else {}
             return {"frames": list(self._waterfall), "frame_count": len(self._waterfall), "fft_size": self.config.fft_size,
-                    "sample_rate_hz": self.config.sample_rate, "center_frequency_hz": self.config.center_frequency,
+                    "sample_rate_hz": source_status.get("sample_rate_hz", self.config.sample_rate),
+                    "center_frequency_hz": source_status.get("center_frequency_hz", self.config.center_frequency),
                     "source_type": self.source_type.value, "provenance": source_provenance(self.source)}
 
     def observations(self, limit: int = 250) -> list[dict]: return self.store.recent(limit)
