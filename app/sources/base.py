@@ -20,8 +20,7 @@ class CaptureSource(Protocol):
     def status(self) -> dict: ...
 
 
-# Legacy names remain accepted by existing source implementations.
-SOURCE_MODES = ("simulator", "sdr", "imported")
+SOURCE_MODES = ("simulator", "sdr", "network_sdr", "imported")
 
 
 def source_provenance(source: CaptureSource) -> dict:
@@ -30,7 +29,6 @@ def source_provenance(source: CaptureSource) -> dict:
     raw_name = str(status.get("source", "unknown"))
     source_type = normalize_source_type(raw_name)
     return {
-        # Keep legacy field for existing consumers.
         "source": raw_name.lower(),
         "source_type": source_type.value,
         "verified_rf": source_type in {
