@@ -21,7 +21,8 @@ def normalize_source_type(value: object) -> SourceType:
     aliases = {
         "SIMULATED": SourceType.SIMULATED, "SIMULATOR": SourceType.SIMULATED, "SIMULATION": SourceType.SIMULATED,
         "IMPORTED_MEASUREMENT": SourceType.IMPORTED_MEASUREMENT, "IMPORTED": SourceType.IMPORTED_MEASUREMENT, "IMPORT": SourceType.IMPORTED_MEASUREMENT,
-        "LIVE_MEASUREMENT": SourceType.LIVE_MEASUREMENT, "SDR": SourceType.LIVE_MEASUREMENT, "LIVE": SourceType.LIVE_MEASUREMENT, "MEASURED": SourceType.LIVE_MEASUREMENT,
+        "LIVE_MEASUREMENT": SourceType.LIVE_MEASUREMENT, "SDR": SourceType.LIVE_MEASUREMENT, "NETWORK_SDR": SourceType.LIVE_MEASUREMENT,
+        "RTL_TCP": SourceType.LIVE_MEASUREMENT, "LIVE": SourceType.LIVE_MEASUREMENT, "MEASURED": SourceType.LIVE_MEASUREMENT,
         "UNKNOWN": SourceType.UNKNOWN,
     }
     return aliases.get(normalized, SourceType.UNKNOWN)
