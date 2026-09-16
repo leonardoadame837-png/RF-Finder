@@ -8,9 +8,12 @@ class Config:
     """RF Finder configuration parameters."""
 
     # Capture source settings
-    source: str = "simulator"  # "simulator" or "sdr"
+    source: str = "simulator"  # "simulator", "sdr", or "network_sdr"
     sdr_device_index: int = 0
     sdr_gain: str | float = "auto"
+    network_sdr_host: str = "127.0.0.1"
+    network_sdr_port: int = 1234
+    network_sdr_timeout_s: float = 5.0
     sample_rate: int = 2_000_000
     center_frequency: int = 100_000_000
 
