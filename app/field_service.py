@@ -16,6 +16,7 @@ from app.config import default_config
 from app.device_telemetry import TelemetryStore
 from app.dsp.analyzer import SpectrumAnalyzer
 from app.dsp.detector import SignalDetector
+from app.dsp.signal_classification import classify_iq
 from app.observation import RFObservation, classify_observation
 from app.sources.base import source_provenance
 from app.sources.simulator import SignalSimulator
@@ -99,28 +100,33 @@ class RFService:
             delay = self.scan_interval_s - (time.monotonic() - started)
             if delay > 0: self._stop.wait(delay)
 
-    def _process_iq(self, iq, source_type: SourceType, timestamp: str | None = None, center_frequency_hz: float | None = None, sample_rate_hz: float | None = None) -> tuple[dict, list]:
+    def _process_iq(self, iq, source_type: SourceType, timestamp: str | None = None, center_frequency_hz: float | None = None, sample_rate_hz: float | None = None) -> tuple[dict, list, dict]:
         frequencies, power, noise_floor = self.analyzer.analyze(iq, center_frequency_hz=center_frequency_hz, sample_rate_hz=sample_rate_hz)
         ts = timestamp or datetime.now(timezone.utc).isoformat()
         detections = self.detector.detect(frequencies, power, noise_floor, self._frame_index + 1, source_type=source_type, timestamp=ts)
-        spectrum = {"timestamp": ts, "frequencies_hz": [float(x) for x in frequencies.tolist()], "power_db": [float(x) for x in power.tolist()], "noise_floor_db": float(noise_floor), "center_frequency_hz": float(center_frequency_hz if center_frequency_hz is not None else self.config.center_frequency), "sample_rate_hz": float(sample_rate_hz if sample_rate_hz is not None else self.config.sample_rate), "source_type": source_type.value, "provenance": {"source_type": source_type.value, "simulated": source_type is SourceType.SIMULATED, "verified_rf": source_type in {SourceType.IMPORTED_MEASUREMENT, SourceType.LIVE_MEASUREMENT}}, "detections": [d.to_dict() for d in detections]}
-        return spectrum, detections
+        classification = classify_iq(iq, float(sample_rate_hz if sample_rate_hz is not None else self.config.sample_rate))
+        spectrum = {"timestamp": ts, "frequencies_hz": [float(x) for x in frequencies.tolist()], "power_db": [float(x) for x in power.tolist()], "noise_floor_db": float(noise_floor), "center_frequency_hz": float(center_frequency_hz if center_frequency_hz is not None else self.config.center_frequency), "sample_rate_hz": float(sample_rate_hz if sample_rate_hz is not None else self.config.sample_rate), "source_type": source_type.value, "provenance": {"source_type": source_type.value, "simulated": source_type is SourceType.SIMULATED, "verified_rf": source_type in {SourceType.IMPORTED_MEASUREMENT, SourceType.LIVE_MEASUREMENT}}, "signal_classification": classification.to_dict(), "detections": [d.to_dict() for d in detections]}
+        return spectrum, detections, classification.to_dict()
 
-    def _persist_detections(self, spectrum: dict, detections: list) -> None:
+    def _persist_detections(self, spectrum: dict, detections: list, classification: dict) -> None:
         for detection in detections:
-            observation = RFObservation(timestamp=spectrum["timestamp"], frequency_hz=detection.center_frequency_hz, peak_power_db=detection.peak_power_db, noise_floor_db=detection.noise_floor_db, snr_db=detection.snr_db, bandwidth_hz=detection.bandwidth_hz, latitude=self._lat, longitude=self._lon, altitude_m=self._alt, source=self.source_name, source_type=detection.source_type, signal_class="unknown", confidence=detection.confidence, evidence="simulated_signal" if detection.source_type == SourceType.SIMULATED.value else "rf_measurement")
-            self.store.add(classify_observation(observation))
+            observation = RFObservation(timestamp=spectrum["timestamp"], frequency_hz=detection.center_frequency_hz, peak_power_db=detection.peak_power_db, noise_floor_db=detection.noise_floor_db, snr_db=detection.snr_db, bandwidth_hz=detection.bandwidth_hz, latitude=self._lat, longitude=self._lon, altitude_m=self._alt, source=self.source_name, source_type=detection.source_type, signal_class=classification["label"], confidence=min(detection.confidence, classification["confidence"]), evidence="simulated_signal" if detection.source_type == SourceType.SIMULATED.value else "rf_measurement", classification_evidence=json.dumps(classification["evidence"], sort_keys=True), encryption_status=classification["label"])
+            stored = classify_observation(observation)
+            if classification["label"] in {"digital", "likely-encrypted"}:
+                stored.signal_class = classification["label"]
+                stored.confidence = classification["confidence"]
+            self.store.add(stored)
 
     def scan_once(self) -> dict:
         iq = np.asarray(self.source.generate_frame(), dtype=np.complex128).reshape(-1)
         frame_index = getattr(self.source, "frame_index", self._frame_index + 1)
         metadata = self._capture_metadata()
-        spectrum, detections = self._process_iq(iq, self.source_type, metadata["timestamp"], metadata["center_frequency_hz"], metadata["sample_rate_hz"])
+        spectrum, detections, classification = self._process_iq(iq, self.source_type, metadata["timestamp"], metadata["center_frequency_hz"], metadata["sample_rate_hz"])
         with self._lock:
             self._frame_index = int(frame_index); self._latest = spectrum; self._latest_iq = iq.copy(); self._latest_detections = [d.to_dict() for d in detections]
             self._waterfall.append(spectrum["power_db"]); self._last_scan_at = spectrum["timestamp"]
-        self._persist_detections(spectrum, detections)
-        return {"frame_index": frame_index, "detections": len(detections), "noise_floor_db": spectrum["noise_floor_db"]}
+        self._persist_detections(spectrum, detections, classification)
+        return {"frame_index": frame_index, "detections": len(detections), "noise_floor_db": spectrum["noise_floor_db"], "signal_classification": classification}
 
     def ingest_imported(self, iq, metadata: dict | None = None) -> dict:
         metadata = metadata or {}
@@ -129,10 +135,10 @@ class RFService:
         if source_type is SourceType.UNKNOWN: source_type = SourceType.IMPORTED_MEASUREMENT
         center = float(metadata.get("center_frequency_hz", self.config.center_frequency)); rate = float(metadata.get("sample_rate_hz", self.config.sample_rate))
         samples = np.asarray(iq, dtype=np.complex128).reshape(-1)
-        spectrum, detections = self._process_iq(samples, source_type, metadata.get("timestamp"), center, rate); spectrum["sample_format"] = str(metadata.get("sample_format", "complex64"))
+        spectrum, detections, classification = self._process_iq(samples, source_type, metadata.get("timestamp"), center, rate); spectrum["sample_format"] = str(metadata.get("sample_format", "complex64"))
         with self._lock:
             self._latest = spectrum; self._latest_iq = samples.copy(); self._latest_detections = [d.to_dict() for d in detections]; self._waterfall.append(spectrum["power_db"]); self._last_scan_at = spectrum["timestamp"]
-        self._persist_detections(spectrum, detections); return spectrum
+        self._persist_detections(spectrum, detections, classification); return spectrum
 
     def latest_iq(self) -> tuple[np.ndarray | None, dict]:
         with self._lock:
