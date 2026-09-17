@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from app.auth import AuthError, AuthManager
@@ -41,6 +42,23 @@ class TestAuthManager(unittest.TestCase):
         self.auth.create_account("alice", "correct horse battery")
         with self.assertRaises(AuthError):
             self.auth.create_account("alice", "another password")
+
+    def test_expired_session_is_rejected(self):
+        self.auth.create_account("alice", "correct horse battery")
+        with patch("app.auth.time.time", side_effect=[100.0, 102.0]):
+            session = self.auth.authenticate("alice", "correct horse battery")
+            self.assertIsNotNone(self.auth.get_session(session.token))
+
+        with patch("app.auth.time.time", return_value=1162.0):
+            self.assertIsNone(self.auth.get_session(session.token))
+            self.assertIsNone(self.auth.validate_token(session.token))
+
+    def test_account_validation_rejects_short_password_and_invalid_role(self):
+        with self.assertRaises(AuthError):
+            self.auth.create_account("alice", "too-short")
+
+        with self.assertRaises(AuthError):
+            self.auth.create_account("alice", "correct horse battery", role="operator")
 
 
 if __name__ == "__main__":
