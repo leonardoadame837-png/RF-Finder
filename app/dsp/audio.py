@@ -70,10 +70,15 @@ def demodulate_fm(
     audio = np.diff(phase) * sample_rate_hz / (2.0 * np.pi)
     cutoff = min(float(audio_bandwidth_hz), sample_rate_hz * 0.45)
     audio = _lowpass(audio, sample_rate_hz, cutoff)
+
+    # Normalize the final output after resampling. FFT resampling can introduce
+    # a small interpolation/ringing overshoot, so normalizing before resampling
+    # does not guarantee the returned waveform stays within [-1, 1].
+    audio = _resample(audio, sample_rate_hz, audio_rate_hz)
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 0:
         audio = audio / peak
-    return _resample(audio, sample_rate_hz, audio_rate_hz)
+    return audio.astype(np.float32, copy=False)
 
 
 def demodulate(
