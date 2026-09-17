@@ -39,6 +39,17 @@ def _resample(audio: np.ndarray, input_rate_hz: float, output_rate_hz: int) -> n
     return signal.resample(audio, target).astype(np.float32)
 
 
+def _normalize_audio(audio: np.ndarray) -> np.ndarray:
+    """Normalize after all DSP/resampling so interpolation cannot overshoot."""
+    output = np.asarray(audio, dtype=np.float32)
+    if output.size == 0:
+        return output
+    peak = float(np.max(np.abs(output)))
+    if peak > 0:
+        output = output / peak
+    return np.clip(output, -1.0, 1.0).astype(np.float32, copy=False)
+
+
 def demodulate_am(
     iq: np.ndarray,
     sample_rate_hz: float,
@@ -51,10 +62,7 @@ def demodulate_am(
     envelope = np.abs(samples)
     audio = envelope - np.mean(envelope)
     audio = _lowpass(audio, sample_rate_hz, min(audio_bandwidth_hz, sample_rate_hz * 0.45))
-    peak = float(np.max(np.abs(audio))) if audio.size else 0.0
-    if peak > 0:
-        audio = audio / peak
-    return _resample(audio, sample_rate_hz, audio_rate_hz)
+    return _normalize_audio(_resample(audio, sample_rate_hz, audio_rate_hz))
 
 
 def demodulate_fm(
@@ -70,10 +78,7 @@ def demodulate_fm(
     audio = np.diff(phase) * sample_rate_hz / (2.0 * np.pi)
     cutoff = min(float(audio_bandwidth_hz), sample_rate_hz * 0.45)
     audio = _lowpass(audio, sample_rate_hz, cutoff)
-    peak = float(np.max(np.abs(audio))) if audio.size else 0.0
-    if peak > 0:
-        audio = audio / peak
-    return _resample(audio, sample_rate_hz, audio_rate_hz)
+    return _normalize_audio(_resample(audio, sample_rate_hz, audio_rate_hz))
 
 
 def demodulate(
