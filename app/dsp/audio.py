@@ -36,28 +36,57 @@ def _resample(audio: np.ndarray, input_rate_hz: float, output_rate_hz: int) -> n
     return np.clip(resampled, -1.0, 1.0).astype(np.float32)
 
 
-def demodulate_am(iq: np.ndarray, sample_rate_hz: float, *, audio_rate_hz: int = 48_000, audio_bandwidth_hz: float = 10_000) -> np.ndarray:
+def demodulate_am(
+    iq: np.ndarray,
+    sample_rate_hz: float,
+    *,
+    audio_rate_hz: int = 48_000,
+    audio_bandwidth_hz: float = 10_000,
+) -> np.ndarray:
     """Envelope-demodulate a conventional AM signal into normalized mono audio."""
     samples = _validate_iq(iq)
-    audio = _lowpass(np.abs(samples) - np.mean(np.abs(samples)), sample_rate_hz, min(audio_bandwidth_hz, sample_rate_hz * 0.45))
+    audio = _lowpass(
+        np.abs(samples) - np.mean(np.abs(samples)),
+        sample_rate_hz,
+        min(audio_bandwidth_hz, sample_rate_hz * 0.45),
+    )
+    audio = _resample(audio, sample_rate_hz, audio_rate_hz)
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 0:
         audio = audio / peak
-    return _resample(audio, sample_rate_hz, audio_rate_hz)
+    return audio.astype(np.float32, copy=False)
 
 
-def demodulate_fm(iq: np.ndarray, sample_rate_hz: float, *, audio_rate_hz: int = 48_000, audio_bandwidth_hz: float = 15_000) -> np.ndarray:
+def demodulate_fm(
+    iq: np.ndarray,
+    sample_rate_hz: float,
+    *,
+    audio_rate_hz: int = 48_000,
+    audio_bandwidth_hz: float = 15_000,
+) -> np.ndarray:
     """Phase-difference FM demodulation into normalized mono audio."""
     samples = _validate_iq(iq)
     audio = np.diff(np.unwrap(np.angle(samples))) * sample_rate_hz / (2.0 * np.pi)
-    audio = _lowpass(audio, sample_rate_hz, min(float(audio_bandwidth_hz), sample_rate_hz * 0.45))
+    audio = _lowpass(
+        audio,
+        sample_rate_hz,
+        min(float(audio_bandwidth_hz), sample_rate_hz * 0.45),
+    )
+    audio = _resample(audio, sample_rate_hz, audio_rate_hz)
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 0:
         audio = audio / peak
-    return _resample(audio, sample_rate_hz, audio_rate_hz)
+    return audio.astype(np.float32, copy=False)
 
 
-def demodulate(iq: np.ndarray, sample_rate_hz: float, mode: str, *, audio_rate_hz: int = 48_000, audio_bandwidth_hz: float | None = None) -> np.ndarray:
+def demodulate(
+    iq: np.ndarray,
+    sample_rate_hz: float,
+    mode: str,
+    *,
+    audio_rate_hz: int = 48_000,
+    audio_bandwidth_hz: float | None = None,
+) -> np.ndarray:
     """Dispatch AM/FM-family demodulation using an explicit receive mode."""
     normalized = str(mode).lower()
     if normalized not in SUPPORTED_MODES:
