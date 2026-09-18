@@ -111,11 +111,12 @@ class RFService:
 
     def _persist_detections(self, spectrum: dict, detections: list, classification: dict) -> None:
         for detection in detections:
-            observation = RFObservation(timestamp=spectrum["timestamp"], frequency_hz=detection.center_frequency_hz, peak_power_db=detection.peak_power_db, noise_floor_db=detection.noise_floor_db, snr_db=detection.snr_db, bandwidth_hz=detection.bandwidth_hz, latitude=self._lat, longitude=self._lon, altitude_m=self._alt, source=self.source_name, source_type=detection.source_type, signal_class=classification["label"], confidence=min(detection.confidence, classification["confidence"]), evidence="simulated_signal" if detection.source_type == SourceType.SIMULATED.value else "rf_measurement", classification_evidence=json.dumps(classification["evidence"], sort_keys=True), encryption_status=classification["label"])
+            observation = RFObservation(timestamp=spectrum["timestamp"], frequency_hz=detection.center_frequency_hz, peak_power_db=detection.peak_power_db, noise_floor_db=detection.noise_floor_db, snr_db=detection.snr_db, bandwidth_hz=detection.bandwidth_hz, latitude=self._lat, longitude=self._lon, altitude_m=self._alt, source=self.source_name, source_type=detection.source_type, signal_class=classification["label"], confidence=detection.confidence, classification_confidence=classification["confidence"], evidence="simulated_signal" if detection.source_type == SourceType.SIMULATED.value else "rf_measurement", classification_evidence=json.dumps(classification["evidence"], sort_keys=True), encryption_status=classification["label"])
             stored = classify_observation(observation)
             if classification["label"] in {"digital", "likely-encrypted"}:
                 stored.signal_class = classification["label"]
-                stored.confidence = classification["confidence"]
+            # Classification is heuristic triage data; detector confidence remains
+            # the independent measurement confidence used for the observation.
             self.store.add(stored)
 
     def scan_once(self) -> dict:
