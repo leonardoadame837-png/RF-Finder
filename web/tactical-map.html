@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VisionShield RF Finder — Tactical View</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.7.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="./tactical-map.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">VISIONSHIELD</div>
+      <div class="subtitle">RF FINDER / TACTICAL VIEW</div>
+    </div>
+    <div class="status"><span class="dot"></span> SYSTEM ONLINE</div>
+  </header>
+
+  <main class="map-shell">
+    <div id="map" aria-label="RF Finder tactical map"></div>
+    <div class="hud hud-top-left">
+      <div>MODE <strong>TACTICAL</strong></div>
+      <div>GPS <strong id="gps-status">SIMULATED</strong></div>
+    </div>
+    <div class="hud hud-bottom-left">
+      <div>LAT <strong id="lat">32.7157</strong></div>
+      <div>LON <strong id="lon">-117.1611</strong></div>
+      <div>ZOOM <strong id="zoom">13.0</strong></div>
+    </div>
+    <aside class="panel">
+      <h1>RF DETECTIONS</h1>
+      <div id="detections"></div>
+      <div class="legend">
+        <span><i class="weak"></i> lower signal</span>
+        <span><i class="strong"></i> stronger signal</span>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="./tactical-map.js"></script>
+</body>
+</html>
