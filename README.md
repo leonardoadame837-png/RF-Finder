@@ -175,3 +175,10 @@ Configuration remains centralized in `app/config.py`:
 ## Safety / lawful use
 
 RF Finder is intended for passive spectrum analysis and authorized measurement. Do not use it to intercept private communications, decrypt protected traffic, jam/interfere with RF systems, or conduct unauthorized surveillance. Spectral characteristics alone do not establish intent or identity.
+
+
+## Camera & Audio workspace
+
+The authenticated Vision milestone adds a dedicated Camera & Audio workspace at `/camera`, a server-side camera registry, timestamp-only RF/audio/video correlation, and secure camera configuration. Camera credentials are kept out of browser URLs and SQLite; local deployments use `RF_FINDER_CAMERA_<ID>_PASSWORD`. A camera connection never changes RF provenance and never creates an RF detection.
+
+For setup and deployment details, see `docs/RF_FINDER_VISION_IMPLEMENTATION.md` and `docs/RF_FINDER_VISION_ARCHITECTURE.md`.
