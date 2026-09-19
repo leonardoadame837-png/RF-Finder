@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 from scipy import signal
 
-
 SUPPORTED_MODES = ("am", "fm", "nfm", "wfm")
 
 
@@ -28,15 +27,13 @@ def _lowpass(samples: np.ndarray, sample_rate_hz: float, cutoff_hz: float) -> np
 
 
 def _resample(audio: np.ndarray, input_rate_hz: float, output_rate_hz: int) -> np.ndarray:
-    if output_rate_hz <= 0:
-        raise ValueError("output_sample_rate_hz must be positive")
-    if input_rate_hz <= 0:
-        raise ValueError("input_sample_rate_hz must be positive")
+    if output_rate_hz <= 0 or input_rate_hz <= 0:
+        raise ValueError("sample rates must be positive")
     if audio.size == 0 or np.isclose(input_rate_hz, output_rate_hz):
-        return audio.astype(np.float32, copy=False)
-    ratio = output_rate_hz / input_rate_hz
-    target = max(1, int(round(audio.size * ratio)))
-    return signal.resample(audio, target).astype(np.float32)
+        return np.clip(audio, -1.0, 1.0).astype(np.float32, copy=False)
+    target = max(1, int(round(audio.size * output_rate_hz / input_rate_hz)))
+    resampled = signal.resample(audio, target)
+    return np.clip(resampled, -1.0, 1.0).astype(np.float32)
 
 
 def demodulate_am(
@@ -48,13 +45,11 @@ def demodulate_am(
 ) -> np.ndarray:
     """Envelope-demodulate a conventional AM signal into normalized mono audio."""
     samples = _validate_iq(iq)
-    envelope = np.abs(samples)
-    audio = envelope - np.mean(envelope)
-    audio = _lowpass(audio, sample_rate_hz, min(audio_bandwidth_hz, sample_rate_hz * 0.45))
-
-    # Normalize the final output after resampling. FFT resampling can introduce
-    # a small interpolation/ringing overshoot, so normalizing before resampling
-    # does not guarantee the returned waveform stays within [-1, 1].
+    audio = _lowpass(
+        np.abs(samples) - np.mean(np.abs(samples)),
+        sample_rate_hz,
+        min(audio_bandwidth_hz, sample_rate_hz * 0.45),
+    )
     audio = _resample(audio, sample_rate_hz, audio_rate_hz)
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 0:
@@ -71,14 +66,12 @@ def demodulate_fm(
 ) -> np.ndarray:
     """Phase-difference FM demodulation into normalized mono audio."""
     samples = _validate_iq(iq)
-    phase = np.unwrap(np.angle(samples))
-    audio = np.diff(phase) * sample_rate_hz / (2.0 * np.pi)
-    cutoff = min(float(audio_bandwidth_hz), sample_rate_hz * 0.45)
-    audio = _lowpass(audio, sample_rate_hz, cutoff)
-
-    # Normalize the final output after resampling. FFT resampling can introduce
-    # a small interpolation/ringing overshoot, so normalizing before resampling
-    # does not guarantee the returned waveform stays within [-1, 1].
+    audio = np.diff(np.unwrap(np.angle(samples))) * sample_rate_hz / (2.0 * np.pi)
+    audio = _lowpass(
+        audio,
+        sample_rate_hz,
+        min(float(audio_bandwidth_hz), sample_rate_hz * 0.45),
+    )
     audio = _resample(audio, sample_rate_hz, audio_rate_hz)
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     if peak > 0:
@@ -99,9 +92,16 @@ def demodulate(
     if normalized not in SUPPORTED_MODES:
         raise ValueError(f"Unsupported demodulation mode: {mode!r}")
     if normalized == "am":
-        bandwidth = 10_000 if audio_bandwidth_hz is None else audio_bandwidth_hz
-        return demodulate_am(iq, sample_rate_hz, audio_rate_hz=audio_rate_hz, audio_bandwidth_hz=bandwidth)
+        return demodulate_am(
+            iq,
+            sample_rate_hz,
+            audio_rate_hz=audio_rate_hz,
+            audio_bandwidth_hz=10_000 if audio_bandwidth_hz is None else audio_bandwidth_hz,
+        )
     bandwidth = 15_000 if normalized in {"fm", "wfm"} else 5_000
-    if audio_bandwidth_hz is not None:
-        bandwidth = audio_bandwidth_hz
-    return demodulate_fm(iq, sample_rate_hz, audio_rate_hz=audio_rate_hz, audio_bandwidth_hz=bandwidth)
+    return demodulate_fm(
+        iq,
+        sample_rate_hz,
+        audio_rate_hz=audio_rate_hz,
+        audio_bandwidth_hz=bandwidth if audio_bandwidth_hz is None else audio_bandwidth_hz,
+    )

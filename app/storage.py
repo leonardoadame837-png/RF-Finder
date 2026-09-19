@@ -36,12 +36,19 @@ class ObservationStore:
                 signal_class TEXT NOT NULL,
                 confidence REAL NOT NULL,
                 evidence TEXT NOT NULL,
+                classification_evidence TEXT NOT NULL DEFAULT '',
+                encryption_status TEXT NOT NULL DEFAULT 'unknown',
                 simulated INTEGER NOT NULL DEFAULT 0
             )""")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(observations)")}
-            if "source_type" not in columns:
-                conn.execute("ALTER TABLE observations ADD COLUMN source_type TEXT NOT NULL DEFAULT 'UNKNOWN'")
-            # Backfill legacy rows conservatively; only known simulator/SDR names map to types.
+            migrations = {
+                "source_type": "ALTER TABLE observations ADD COLUMN source_type TEXT NOT NULL DEFAULT 'UNKNOWN'",
+                "classification_evidence": "ALTER TABLE observations ADD COLUMN classification_evidence TEXT NOT NULL DEFAULT ''",
+                "encryption_status": "ALTER TABLE observations ADD COLUMN encryption_status TEXT NOT NULL DEFAULT 'unknown'",
+            }
+            for name, statement in migrations.items():
+                if name not in columns:
+                    conn.execute(statement)
             conn.execute("""UPDATE observations SET source_type = CASE
                 WHEN lower(source) IN ('simulator','simulation') THEN 'SIMULATED'
                 WHEN lower(source) IN ('sdr','live','measured') THEN 'LIVE_MEASUREMENT'
@@ -51,6 +58,7 @@ class ObservationStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_time ON observations(timestamp)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_freq ON observations(frequency_hz)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_source_type ON observations(source_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_obs_encryption_status ON observations(encryption_status)")
 
     def add(self, observation: RFObservation) -> int:
         data = observation.to_dict()
@@ -60,11 +68,13 @@ class ObservationStore:
             cur = conn.execute("""INSERT INTO observations
                 (timestamp, frequency_hz, peak_power_db, noise_floor_db, snr_db,
                  bandwidth_hz, latitude, longitude, altitude_m, bearing_deg, source,
-                 source_type, signal_class, confidence, evidence, simulated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 source_type, signal_class, confidence, evidence, classification_evidence,
+                 encryption_status, simulated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (*[data[k] for k in ("timestamp", "frequency_hz", "peak_power_db", "noise_floor_db",
                     "snr_db", "bandwidth_hz", "latitude", "longitude", "altitude_m", "bearing_deg", "source")],
-                 source_type, data["signal_class"], data["confidence"], data["evidence"], int(simulated)))
+                 source_type, data["signal_class"], data["confidence"], data["evidence"],
+                 data["classification_evidence"], data["encryption_status"], int(simulated)))
             return int(cur.lastrowid)
 
     def recent(self, limit: int = 500) -> list[dict]:

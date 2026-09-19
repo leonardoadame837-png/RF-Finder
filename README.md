@@ -175,3 +175,5 @@ Configuration remains centralized in `app/config.py`:
 ## Safety / lawful use
 
 RF Finder is intended for passive spectrum analysis and authorized measurement. Do not use it to intercept private communications, decrypt protected traffic, jam/interfere with RF systems, or conduct unauthorized surveillance. Spectral characteristics alone do not establish intent or identity.
+
+<!-- CI trigger: integration validation -->
