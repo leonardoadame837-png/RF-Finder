@@ -11,6 +11,7 @@ from app.api_auth import APIAuth
 from app.auth import AuthError, AuthManager
 from app.evidence_api import investigation_report, localization_payload
 from app.investigations import InvestigationStore
+from app.vision import CameraRegistry, EventCorrelator, camera_status
 
 
 HTML = r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RF Finder — Field Monitor</title>
@@ -47,7 +48,7 @@ async function status(){if(!token)return;try{const s=await api('/api/status');$(
 
 
 def create_server(service, host="127.0.0.1", port=8000, auth=None):
-    api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path)
+    api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path); camera_registry=CameraRegistry(service.config.database_path)
     class Handler(BaseHTTPRequestHandler):
         def _send(self,payload,status=200,content_type="application/json"):
             body=payload if isinstance(payload,bytes) else json.dumps(payload).encode(); self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -59,6 +60,11 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
         def do_GET(self):
             path=urlparse(self.path).path
             if path in ("/","/tactical"): return self._send(HTML.encode(),content_type="text/html; charset=utf-8")
+            if path == "/camera":
+                from pathlib import Path
+                page = Path(__file__).resolve().parent.parent / "docs" / "camera.html"
+                try: return self._send(page.read_bytes(),content_type="text/html; charset=utf-8")
+                except OSError: return self._send({"error":"camera workspace unavailable"},404)
             try:
                 if path=="/api/auth/me": p=self._require(None); return self._send({"username":p.user.username,"role":p.user.role,"permissions":sorted(api_auth_permissions(p.user.role))})
                 if path=="/api/status": self._require("rf.read"); return self._send(service.status())
@@ -66,6 +72,10 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                 if path=="/api/waterfall": self._require("rf.read"); return self._send(service.waterfall())
                 if path=="/api/observations": self._require("rf.read"); q=parse_qs(urlparse(self.path).query); return self._send(service.observations(max(1,min(1000,int(q.get("limit",[250])[0])))))
                 if path=="/api/investigations": self._require("investigation.read"); return self._send(investigation_store.list())
+                if path=="/api/cameras": self._require("investigation.read"); return self._send(camera_registry.list())
+                if path.startswith("/api/cameras/"):
+                    self._require("investigation.read"); camera_id=int(path.split("/")[3]); camera=camera_registry.get(camera_id); return self._send({**(camera or {"error":"camera not found"}), "status": camera_status(camera)},200 if camera else 404)
+                if path=="/api/vision/events": self._require("investigation.read"); return self._send([])
                 if path.startswith("/api/investigations/") and path.endswith("/report"):
                     self._require("investigation.read"); iid=int(path.split("/")[3]); data=investigation_report(investigation_store,service.store,iid); return self._send(data or {"error":"investigation not found"},200 if data else 404)
                 if path=="/api/localization/heatmap": self._require("rf.read"); return self._send(localization_payload(service.store)["heatmap"])
@@ -81,6 +91,12 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                 if path=="/api/start": self._require("rf.scan"); service.start(); return self._send(service.status())
                 if path=="/api/stop": self._require("rf.scan"); service.stop(); return self._send(service.status())
                 if path=="/api/investigations": self._require("investigation.write"); data=self._json_body(); return self._send(investigation_store.create(str(data.get("title","RF investigation")),str(data.get("notes",""))),201)
+                if path=="/api/cameras":
+                    self._require("investigation.write"); data=self._json_body()
+                    camera=camera_registry.create(name=str(data.get("name","RF Camera")),host=str(data.get("host","")),port=int(data.get("port",554)),protocol=str(data.get("protocol","rtsp")),username=str(data.get("username","")),audio_enabled=bool(data.get("audio_enabled",False)))
+                    return self._send(camera,201)
+                if path=="/api/vision/correlate":
+                    self._require("investigation.read"); data=self._json_body(); return self._send({"groups":EventCorrelator(int(data.get("window_ms",1000))).correlate(list(data.get("events") or []))})
                 if path.startswith("/api/investigations/") and path.endswith("/observations"):
                     self._require("investigation.write"); iid=int(path.split("/")[3]); data=self._json_body(); oid=int(data.get("observation_id"));
                     if not investigation_store.attach_observation(iid,oid): return self._send({"error":"investigation not found"},404)
