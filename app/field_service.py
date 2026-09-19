@@ -47,7 +47,10 @@ class RFService:
         if mode == "sdr":
             from app.sources.sdr import RTLSDRSource
             return RTLSDRSource(config, device_index=config.sdr_device_index, gain=config.sdr_gain)
-        raise ValueError(f"Unsupported RF source: {config.source!r}. Use simulator or sdr.")
+        if mode == "network_sdr":
+            from app.sources.network import RTLTCPSource
+            return RTLTCPSource(config, host=config.network_sdr_host, port=config.network_sdr_port, timeout_s=config.network_sdr_timeout_s)
+        raise ValueError(f"Unsupported RF source: {config.source!r}. Use simulator, sdr, or network_sdr.")
 
     @staticmethod
     def _env_float(name):
