@@ -28,7 +28,7 @@
 <p><button class="btn" id="register">Register Camera</button></p>
 </div>
 <div class="panel"><h2>Audio Analysis</h2><div class="metrics"><div class="metric"><small>Availability</small><b id="audioState">—</b></div><div class="metric"><small>Level</small><b>—</b></div></div><p class="notice">Audio analysis is opt-in and produces audio observations only. It is never an RF measurement.</p></div>
-<div class="panel"><h2>Investigation</h2><p class="notice">Correlated events can be attached to the existing authenticated investigation workflow once evidence capture is enabled.</p><pre id="out">No event data.</pre></div>
+<div class="panel"><h2>Broker</h2><p class="notice">Backend RTSP/RTSPS to HLS broker. Requires ffmpeg on the RF Finder host.</p><button class="btn" id="start">Start Selected Camera</button> <button class="btn" id="stop">Stop Selected Camera</button></div><div class="panel"><h2>Investigation</h2><p class="notice">Correlated events can be attached to the existing authenticated investigation workflow once evidence capture is enabled.</p><pre id="out">No event data.</pre></div>
 </aside></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script><script>
@@ -42,6 +42,6 @@ async function selectCamera(id){try{const c=await api('/api/cameras/'+id);$('aud
 function renderEvents(e){$('out').textContent=JSON.stringify(e,null,2);$('correlations').innerHTML='No correlation groups.'}
 async function correlate(){try{const d=await api('/api/vision/correlate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({window_ms:Number($('window').value),events:[]})});$('correlations').textContent=JSON.stringify(d,null,2)}catch(e){alert(e.message)}}
 $('login').onclick=login;$('refresh').onclick=refresh;$('correlate').onclick=correlate;
-$('register').onclick=async()=>{try{const d=await api('/api/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('name').value,host:$('host').value,port:Number($('port').value),protocol:$('protocol').value,username:$('username').value,audio_enabled:$('audio').checked})});alert('Camera registered as ID '+d.id+'. Set RF_FINDER_CAMERA_'+d.id+'_PASSWORD in the backend environment.');refresh()}catch(e){alert(e.message)}};
+$('register').onclick=async()=>{try{const d=await api('/api/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('name').value,host:$('host').value,port:Number($('port').value),protocol:$('protocol').value,username:$('username').value,stream_path:$('streamPath').value,audio_enabled:$('audio').checked})});alert('Camera registered as ID '+d.id+'. Set RF_FINDER_CAMERA_'+d.id+'_PASSWORD in the backend environment.');refresh()}catch(e){alert(e.message)}};
 if(token)api('/api/auth/me').then(d=>{$('identity').textContent=d.username+' / '+d.role;refresh()}).catch(()=>{token=null;sessionStorage.removeItem('rf_finder_token')});
 </script></body></html>
