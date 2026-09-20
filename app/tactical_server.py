@@ -74,6 +74,13 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                 if path=="/api/observations": self._require("rf.read"); q=parse_qs(urlparse(self.path).query); return self._send(service.observations(max(1,min(1000,int(q.get("limit",[250])[0])))))
                 if path=="/api/investigations": self._require("investigation.read"); return self._send(investigation_store.list())
                 if path=="/api/cameras": self._require("investigation.read"); return self._send(camera_registry.list())
+                if path.startswith("/api/cameras/") and "/stream/" in path:
+                    self._require("investigation.read")
+                    parts=path.split("/"); camera_id=int(parts[3]); relative="/".join(parts[5:])
+                    file=broker.stream_file(camera_id,relative)
+                    if not file: return self._send({"error":"stream segment not found"},404)
+                    mime="application/vnd.apple.mpegurl" if file.suffix==".m3u8" else "video/mp2t"
+                    return self._send(file.read_bytes(),content_type=mime)
                 if path.startswith("/api/cameras/"):
                     self._require("investigation.read"); camera_id=int(path.split("/")[3]); camera=camera_registry.get(camera_id); return self._send({**(camera or {"error":"camera not found"}), "status": {**camera_status(camera), "broker": broker.status(camera) if camera else {"state":"NOT_FOUND"}}},200 if camera else 404)
                 if path=="/api/vision/events": self._require("investigation.read"); q=parse_qs(urlparse(self.path).query); return self._send(vision_events.recent(int(q.get("limit",[200])[0])))
@@ -102,6 +109,9 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                     return self._send(broker.start(camera))
                 if path.startswith("/api/cameras/") and path.endswith("/stop"):
                     self._require("investigation.write"); camera_id=int(path.split("/")[3]); return self._send(broker.stop(camera_id))
+                if path=="/api/vision/events":
+                    self._require("investigation.write"); event=self._json_body()
+                    return self._send(vision_events.add(event),201)
                 if path=="/api/vision/correlate":
                     self._require("investigation.read"); data=self._json_body()
                     events=list(data.get("events") or []) or vision_events.recent(200)
@@ -114,6 +124,7 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                     if not investigation_store.attach_observation(iid,oid): return self._send({"error":"investigation not found"},404)
                     return self._send(investigation_store.get(iid))
                 return self._send({"error":"not found"},404)
+            except (RuntimeError, ValueError) as exc:return self._send({"error":str(exc)},400)
             except AuthError:return self._send({"error":"Invalid username or password."},401)
             except PermissionError as exc:return self._send({"error":str(exc)},401 if str(exc)=="Authentication required" else 403)
             except (ValueError,TypeError):return self._send({"error":"invalid request"},400)
