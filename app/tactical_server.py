@@ -11,6 +11,8 @@ from app.api_auth import APIAuth
 from app.auth import AuthError, AuthManager
 from app.evidence_api import investigation_report, localization_payload
 from app.investigations import InvestigationStore
+from app.vision import CameraRegistry, EventCorrelator, VisionEventStore, camera_status
+from app.camera_broker import CameraBroker
 
 
 HTML = r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RF Finder — Field Monitor</title>
@@ -47,7 +49,7 @@ async function status(){if(!token)return;try{const s=await api('/api/status');$(
 
 
 def create_server(service, host="127.0.0.1", port=8000, auth=None):
-    api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path)
+    api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path); camera_registry=CameraRegistry(service.config.database_path); vision_events=VisionEventStore(service.config.database_path); broker=CameraBroker(event_callback=vision_events.add)
     class Handler(BaseHTTPRequestHandler):
         def _send(self,payload,status=200,content_type="application/json"):
             body=payload if isinstance(payload,bytes) else json.dumps(payload).encode(); self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -59,6 +61,11 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
         def do_GET(self):
             path=urlparse(self.path).path
             if path in ("/","/tactical"): return self._send(HTML.encode(),content_type="text/html; charset=utf-8")
+            if path == "/camera":
+                from pathlib import Path
+                page = Path(__file__).resolve().parent.parent / "docs" / "camera.html"
+                try: return self._send(page.read_bytes(),content_type="text/html; charset=utf-8")
+                except OSError: return self._send({"error":"camera workspace unavailable"},404)
             try:
                 if path=="/api/auth/me": p=self._require(None); return self._send({"username":p.user.username,"role":p.user.role,"permissions":sorted(api_auth_permissions(p.user.role))})
                 if path=="/api/status": self._require("rf.read"); return self._send(service.status())
@@ -66,6 +73,17 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                 if path=="/api/waterfall": self._require("rf.read"); return self._send(service.waterfall())
                 if path=="/api/observations": self._require("rf.read"); q=parse_qs(urlparse(self.path).query); return self._send(service.observations(max(1,min(1000,int(q.get("limit",[250])[0])))))
                 if path=="/api/investigations": self._require("investigation.read"); return self._send(investigation_store.list())
+                if path=="/api/cameras": self._require("investigation.read"); return self._send(camera_registry.list())
+                if path.startswith("/api/cameras/") and "/stream/" in path:
+                    self._require("investigation.read")
+                    parts=path.split("/"); camera_id=int(parts[3]); relative="/".join(parts[5:])
+                    file=broker.stream_file(camera_id,relative)
+                    if not file: return self._send({"error":"stream segment not found"},404)
+                    mime="application/vnd.apple.mpegurl" if file.suffix==".m3u8" else "video/mp2t"
+                    return self._send(file.read_bytes(),content_type=mime)
+                if path.startswith("/api/cameras/"):
+                    self._require("investigation.read"); camera_id=int(path.split("/")[3]); camera=camera_registry.get(camera_id); return self._send({**(camera or {"error":"camera not found"}), "status": {**camera_status(camera), "broker": broker.status(camera) if camera else {"state":"NOT_FOUND"}}},200 if camera else 404)
+                if path=="/api/vision/events": self._require("investigation.read"); q=parse_qs(urlparse(self.path).query); return self._send(vision_events.recent(int(q.get("limit",[200])[0])))
                 if path.startswith("/api/investigations/") and path.endswith("/report"):
                     self._require("investigation.read"); iid=int(path.split("/")[3]); data=investigation_report(investigation_store,service.store,iid); return self._send(data or {"error":"investigation not found"},200 if data else 404)
                 if path=="/api/localization/heatmap": self._require("rf.read"); return self._send(localization_payload(service.store)["heatmap"])
@@ -81,11 +99,32 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                 if path=="/api/start": self._require("rf.scan"); service.start(); return self._send(service.status())
                 if path=="/api/stop": self._require("rf.scan"); service.stop(); return self._send(service.status())
                 if path=="/api/investigations": self._require("investigation.write"); data=self._json_body(); return self._send(investigation_store.create(str(data.get("title","RF investigation")),str(data.get("notes",""))),201)
+                if path=="/api/cameras":
+                    self._require("investigation.write"); data=self._json_body()
+                    camera=camera_registry.create(name=str(data.get("name","RF Camera")),host=str(data.get("host","")),port=int(data.get("port",554)),protocol=str(data.get("protocol","rtsp")),username=str(data.get("username","")),stream_path=str(data.get("stream_path","/")),audio_enabled=bool(data.get("audio_enabled",False)))
+                    return self._send(camera,201)
+                if path.startswith("/api/cameras/") and path.endswith("/start"):
+                    self._require("investigation.write"); camera_id=int(path.split("/")[3]); camera=camera_registry.get(camera_id)
+                    if not camera: return self._send({"error":"camera not found"},404)
+                    return self._send(broker.start(camera))
+                if path.startswith("/api/cameras/") and path.endswith("/stop"):
+                    self._require("investigation.write"); camera_id=int(path.split("/")[3]); return self._send(broker.stop(camera_id))
+                if path=="/api/vision/events":
+                    self._require("investigation.write"); event=self._json_body()
+                    return self._send(vision_events.add(event),201)
+                if path=="/api/vision/correlate":
+                    self._require("investigation.read"); data=self._json_body()
+                    events=list(data.get("events") or []) or vision_events.recent(200)
+                    spectrum=service.latest_spectrum()
+                    for index,detection in enumerate(spectrum.get("detections") or []):
+                        events.append({"event_id":f"rf-{spectrum.get('timestamp')}-{index}","event_type":"RF_DETECTION","source_id":"rf-service","source_type":spectrum.get("source_type","UNKNOWN"),"timestamp":spectrum.get("timestamp"),"payload":detection})
+                    return self._send({"groups":EventCorrelator(int(data.get("window_ms",1000))).correlate(events)})
                 if path.startswith("/api/investigations/") and path.endswith("/observations"):
                     self._require("investigation.write"); iid=int(path.split("/")[3]); data=self._json_body(); oid=int(data.get("observation_id"));
                     if not investigation_store.attach_observation(iid,oid): return self._send({"error":"investigation not found"},404)
                     return self._send(investigation_store.get(iid))
                 return self._send({"error":"not found"},404)
+            except (RuntimeError, ValueError) as exc:return self._send({"error":str(exc)},400)
             except AuthError:return self._send({"error":"Invalid username or password."},401)
             except PermissionError as exc:return self._send({"error":str(exc)},401 if str(exc)=="Authentication required" else 403)
             except (ValueError,TypeError):return self._send({"error":"invalid request"},400)

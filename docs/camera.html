@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RF Finder — Camera & Audio</title>
+<style>
+:root{color-scheme:dark;--bg:#05080d;--panel:#0b1119;--line:#1b2a39;--text:#e7f6ff;--muted:#8aa0b2;--accent:#55d8ff;--good:#69e3ad;--warn:#ffd166;--bad:#ff8c8c}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#102434 0,#05080d 42%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}.wrap{max-width:1400px;margin:auto;padding:18px 20px 50px}.bar,.panel{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:14px;margin:12px 0}.bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.actions{display:flex;gap:8px;flex-wrap:wrap}.btn,input,select{padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#0d1721;color:var(--text)}.btn{cursor:pointer}.grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px}.video{height:480px;display:grid;place-items:center;background:#03070b;border:1px solid var(--line);border-radius:8px;color:var(--muted);text-align:center}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{padding:10px;border:1px solid var(--line);border-radius:8px}.metric small{display:block;color:var(--muted);margin-bottom:3px}.badge{padding:5px 10px;border-radius:999px;border:1px solid var(--warn);color:var(--warn);font-weight:800;font-size:12px}.good{border-color:var(--good);color:var(--good)}.error{color:var(--bad)}.notice{color:var(--muted);font-size:12px}.camera{padding:10px;border-top:1px solid var(--line);cursor:pointer}.camera:hover{background:#0f1b25}.timeline{max-height:340px;overflow:auto}.event{padding:9px;border-top:1px solid var(--line)}pre{white-space:pre-wrap;max-height:300px;overflow:auto}@media(max-width:950px){.grid{grid-template-columns:1fr}.video{height:360px}.metrics{grid-template-columns:1fr 1fr}}
+</style></head>
+<body><main class="wrap">
+<div class="bar"><div><b>RF FINDER / CAMERA & AUDIO</b><div class="notice">Private camera workspace · RF measurements remain source-aware</div></div><div><span id="source" class="badge">UNKNOWN</span> <span id="identity" class="badge">SIGNED OUT</span></div></div>
+<div class="bar"><div class="actions"><button class="btn" id="login">Login</button><button class="btn" id="refresh">Refresh</button><button class="btn" id="add">Add Camera</button></div><span id="state" class="notice">IDLE</span></div>
+<div class="panel notice"><b>Measurement integrity:</b> A camera does not measure RF. RF frequency, power, bandwidth and SNR shown here must come from the authenticated RF Spectrum Analyzer. Camera video/audio are independent observations.</div>
+<div class="grid">
+<section>
+<div class="panel"><h2>Live Camera</h2><video id="player" class="video" controls autoplay muted playsinline></video></div>
+<div class="panel"><h2>RF Spectrum</h2><div class="metrics"><div class="metric"><small>RF Source</small><b id="rfSource">—</b></div><div class="metric"><small>Center</small><b id="center">—</b></div><div class="metric"><small>Noise Floor</small><b id="noise">—</b></div><div class="metric"><small>Detections</small><b id="detections">0</b></div></div></div>
+<div class="panel"><h2>Event Correlation</h2><div class="actions"><label>Window <input id="window" type="number" min="0" max="60000" value="1000"> ms</label><button class="btn" id="correlate">Correlate Current Events</button></div><div id="correlations" class="timeline">No correlation groups.</div></div>
+</section>
+<aside>
+<div class="panel"><h2>Cameras</h2><div id="cameras">Sign in to view cameras.</div></div>
+<div class="panel"><h2>Camera Registration</h2>
+<div class="notice">Password is never sent to the browser as a stream URL. After registration, set RF_FINDER_CAMERA_<ID>_PASSWORD in the backend environment.</div>
+<p><input id="name" placeholder="Display name" style="width:100%"></p>
+<p><input id="host" placeholder="192.168.1.50" style="width:100%"></p>
+<p><input id="port" type="number" value="554" style="width:100%"></p>
+<p><select id="protocol" style="width:100%"><option value="rtsp">RTSP</option><option value="rtsps">RTSPS</option><option value="onvif">ONVIF</option></select></p>
+<p><input id="username" placeholder="Camera username" style="width:100%"></p><p><input id="streamPath" placeholder="/stream/path" value="/" style="width:100%"></p>
+<label><input id="audio" type="checkbox"> Audio enabled/available</label>
+<p><button class="btn" id="register">Register Camera</button></p>
+</div>
+<div class="panel"><h2>Audio Analysis</h2><div class="metrics"><div class="metric"><small>Availability</small><b id="audioState">—</b></div><div class="metric"><small>Level</small><b>—</b></div></div><p class="notice">Audio analysis is opt-in and produces audio observations only. It is never an RF measurement.</p></div>
+<div class="panel"><h2>Broker</h2><p class="notice">Backend RTSP/RTSPS to HLS broker. Requires ffmpeg on the RF Finder host.</p><button class="btn" id="start">Start Selected Camera</button> <button class="btn" id="stop">Stop Selected Camera</button></div><div class="panel"><h2>Investigation</h2><p class="notice">Correlated events can be attached to the existing authenticated investigation workflow once evidence capture is enabled.</p><pre id="out">No event data.</pre></div>
+</aside></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script><script>
+let token=sessionStorage.getItem('rf_finder_token');const $=id=>document.getElementById(id);
+async function api(path,o={}){o.headers={...(o.headers||{}),...(token?{Authorization:'Bearer '+token}:{})};const r=await fetch(path,o);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'API '+r.status);return d}
+function hz(v){return !Number.isFinite(Number(v))?'—':Math.abs(v)>=1e9?(v/1e9).toFixed(3)+' GHz':Math.abs(v)>=1e6?(v/1e6).toFixed(3)+' MHz':(v/1e3).toFixed(3)+' kHz'}
+async function login(){const u=prompt('Username:');if(u===null)return;const p=prompt('Password:');if(p===null)return;try{const d=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});token=d.token;sessionStorage.setItem('rf_finder_token',token);$('identity').textContent=d.username+' / '+d.role;refresh()}catch(e){alert(e.message)}}
+async function refresh(){if(!token)return;try{const [cams,spec,events]=await Promise.all([api('/api/cameras'),api('/api/spectrum'),api('/api/vision/events')]);$('source').textContent=spec.source_type||'UNKNOWN';$('source').className='badge '+(['LIVE_MEASUREMENT','IMPORTED_MEASUREMENT'].includes(spec.source_type)?'good':'');$('rfSource').textContent=spec.source_type||'UNKNOWN';$('center').textContent=hz(Number(spec.center_frequency_hz));$('noise').textContent=Number.isFinite(Number(spec.noise_floor_db))?Number(spec.noise_floor_db).toFixed(1)+' dBFS':'—';$('detections').textContent=(spec.detections||[]).length;renderCameras(cams);renderEvents(events)}catch(e){$('state').textContent=e.message}}
+function renderCameras(cams){$('cameras').innerHTML=cams.length?cams.map(c=>'<div class="camera" onclick="selectCamera('+c.id+')"><b>'+c.name+'</b><br>'+c.protocol.toUpperCase()+' · '+c.host+':'+c.port+'<br><span class="notice">'+c.connection+' · audio '+(c.audio_enabled?'enabled':'disabled')+'</span></div>').join(''):'No cameras registered.'}
+async function selectCamera(id){try{const c=await api('/api/cameras/'+id);$('audioState').textContent=c.audio_enabled?'ENABLED':'DISABLED';$('video').innerHTML='<b>'+c.name+'</b><br><br>'+c.connection+'<br><span class="notice">'+(c.status?.message||'No browser stream broker configured.')+'</span>'}catch(e){alert(e.message)}}
+function renderEvents(e){$('out').textContent=JSON.stringify(e,null,2);$('correlations').innerHTML='No correlation groups.'}
+async function correlate(){try{const d=await api('/api/vision/correlate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({window_ms:Number($('window').value),events:[]})});$('correlations').textContent=JSON.stringify(d,null,2)}catch(e){alert(e.message)}}
+$('login').onclick=login;$('refresh').onclick=refresh;$('correlate').onclick=correlate;
+$('register').onclick=async()=>{try{const d=await api('/api/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('name').value,host:$('host').value,port:Number($('port').value),protocol:$('protocol').value,username:$('username').value,stream_path:$('streamPath').value,audio_enabled:$('audio').checked})});alert('Camera registered as ID '+d.id+'. Set RF_FINDER_CAMERA_'+d.id+'_PASSWORD in the backend environment.');refresh()}catch(e){alert(e.message)}};
+if(token)api('/api/auth/me').then(d=>{$('identity').textContent=d.username+' / '+d.role;refresh()}).catch(()=>{token=null;sessionStorage.removeItem('rf_finder_token')});
+</script></body></html>
