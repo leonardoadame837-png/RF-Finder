@@ -11,7 +11,7 @@
 <div class="panel notice"><b>Measurement integrity:</b> A camera does not measure RF. RF frequency, power, bandwidth and SNR shown here must come from the authenticated RF Spectrum Analyzer. Camera video/audio are independent observations.</div>
 <div class="grid">
 <section>
-<div class="panel"><h2>Live Camera</h2><div id="video" class="video">No camera broker connected.<br><br>Register a compatible camera below. Browser playback requires a backend broker such as WebRTC/HLS; private RTSP credentials never enter this page.</div></div>
+<div class="panel"><h2>Live Camera</h2><video id="player" class="video" controls autoplay muted playsinline></video></div>
 <div class="panel"><h2>RF Spectrum</h2><div class="metrics"><div class="metric"><small>RF Source</small><b id="rfSource">—</b></div><div class="metric"><small>Center</small><b id="center">—</b></div><div class="metric"><small>Noise Floor</small><b id="noise">—</b></div><div class="metric"><small>Detections</small><b id="detections">0</b></div></div></div>
 <div class="panel"><h2>Event Correlation</h2><div class="actions"><label>Window <input id="window" type="number" min="0" max="60000" value="1000"> ms</label><button class="btn" id="correlate">Correlate Current Events</button></div><div id="correlations" class="timeline">No correlation groups.</div></div>
 </section>
@@ -23,7 +23,7 @@
 <p><input id="host" placeholder="192.168.1.50" style="width:100%"></p>
 <p><input id="port" type="number" value="554" style="width:100%"></p>
 <p><select id="protocol" style="width:100%"><option value="rtsp">RTSP</option><option value="rtsps">RTSPS</option><option value="onvif">ONVIF</option></select></p>
-<p><input id="username" placeholder="Camera username" style="width:100%"></p>
+<p><input id="username" placeholder="Camera username" style="width:100%"></p><p><input id="streamPath" placeholder="/stream/path" value="/" style="width:100%"></p>
 <label><input id="audio" type="checkbox"> Audio enabled/available</label>
 <p><button class="btn" id="register">Register Camera</button></p>
 </div>
@@ -31,7 +31,7 @@
 <div class="panel"><h2>Investigation</h2><p class="notice">Correlated events can be attached to the existing authenticated investigation workflow once evidence capture is enabled.</p><pre id="out">No event data.</pre></div>
 </aside></div>
 </main>
-<script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script><script>
 let token=sessionStorage.getItem('rf_finder_token');const $=id=>document.getElementById(id);
 async function api(path,o={}){o.headers={...(o.headers||{}),...(token?{Authorization:'Bearer '+token}:{})};const r=await fetch(path,o);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'API '+r.status);return d}
 function hz(v){return !Number.isFinite(Number(v))?'—':Math.abs(v)>=1e9?(v/1e9).toFixed(3)+' GHz':Math.abs(v)>=1e6?(v/1e6).toFixed(3)+' MHz':(v/1e3).toFixed(3)+' kHz'}
