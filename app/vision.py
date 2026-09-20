@@ -81,15 +81,15 @@ class CameraRegistry:
         stream_path = str(stream_path or "/").strip() or "/"
         if not stream_path.startswith("/"):
             stream_path = "/" + stream_path
-        if len(stream_path) > 512 or any(ch in stream_path for ch in "\\r\\n"):
+        if len(stream_path) > 512 or any(ch in stream_path for ch in "\r\n"):
             raise ValueError("Invalid camera stream path")
         now = utc_now()
         with sqlite3.connect(self.path) as conn:
             cur = conn.execute(
                 """INSERT INTO cameras
-                   (name,host,port,protocol,username,audio_enabled,enabled,created_at,updated_at)
-                   VALUES (?,?,?,?,?,?,1,?,?)""",
-                (name, host, port, protocol, username, int(bool(audio_enabled)), now, now),
+                   (name,host,port,protocol,username,stream_path,audio_enabled,enabled,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,1,?,?)""",
+                (name, host, port, protocol, username, stream_path, int(bool(audio_enabled)), now, now),
             )
             camera_id = int(cur.lastrowid)
         return self.get(camera_id)
