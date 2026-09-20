@@ -60,20 +60,29 @@ class CameraRegistry:
                 port INTEGER NOT NULL,
                 protocol TEXT NOT NULL,
                 username TEXT NOT NULL DEFAULT '',
+                stream_path TEXT NOT NULL DEFAULT '/',
                 audio_enabled INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )""")
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(cameras)").fetchall()}
+            if "stream_path" not in columns:
+                conn.execute("ALTER TABLE cameras ADD COLUMN stream_path TEXT NOT NULL DEFAULT '/'")
 
     def create(self, *, name: str, host: str, port: int = 554,
-               protocol: str = "rtsp", username: str = "",
+               protocol: str = "rtsp", username: str = "", stream_path: str = "/",
                audio_enabled: bool = False) -> dict:
         name = str(name or "").strip() or "RF Camera"
         host = validate_camera_host(host)
         port = validate_camera_port(port)
         protocol = validate_camera_protocol(protocol)
         username = str(username or "").strip()
+        stream_path = str(stream_path or "/").strip() or "/"
+        if not stream_path.startswith("/"):
+            stream_path = "/" + stream_path
+        if len(stream_path) > 512 or any(ch in stream_path for ch in "\\r\\n"):
+            raise ValueError("Invalid camera stream path")
         now = utc_now()
         with sqlite3.connect(self.path) as conn:
             cur = conn.execute(
@@ -164,6 +173,48 @@ class EventCorrelator:
                 })
         return groups
 
+
+class VisionEventStore:
+    """Persist camera/video/audio observations without turning them into RF measurements."""
+    def __init__(self, database_path: str, max_payload_bytes: int = 16384):
+        self.path = Path(database_path)
+        self.max_payload_bytes = max_payload_bytes
+        with sqlite3.connect(self.path) as conn:
+            conn.execute("""CREATE TABLE IF NOT EXISTS vision_events (
+                event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, source_id TEXT NOT NULL,
+                source_type TEXT NOT NULL, timestamp TEXT NOT NULL, payload_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )""")
+
+    def add(self, event: dict) -> dict:
+        required = ("event_id", "event_type", "source_id", "source_type", "timestamp")
+        if any(not str(event.get(k, "")).strip() for k in required):
+            raise ValueError("Vision event requires event_id, event_type, source_id, source_type and timestamp")
+        source_type = str(event["source_type"]).upper()
+        if source_type not in {"CAMERA_VIDEO", "CAMERA_AUDIO", "CAMERA_STATUS"}:
+            raise ValueError("Vision event source_type must be CAMERA_VIDEO, CAMERA_AUDIO or CAMERA_STATUS")
+        payload = dict(event.get("payload") or {})
+        import json
+        encoded = json.dumps(payload, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > self.max_payload_bytes:
+            raise ValueError("Vision event payload is too large")
+        item = {k: str(event[k]) for k in required}
+        item["source_type"] = source_type
+        item["payload"] = payload
+        with sqlite3.connect(self.path) as conn:
+            conn.execute("INSERT OR REPLACE INTO vision_events(event_id,event_type,source_id,source_type,timestamp,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                         (item["event_id"], item["event_type"], item["source_id"], source_type, item["timestamp"], encoded, utc_now()))
+        return item
+
+    def recent(self, limit: int = 200) -> list[dict]:
+        import json
+        limit = max(1, min(1000, int(limit)))
+        with sqlite3.connect(self.path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT * FROM vision_events ORDER BY timestamp DESC LIMIT ?", (limit,)).fetchall()
+        return [{"event_id":r["event_id"],"event_type":r["event_type"],"source_id":r["source_id"],
+                 "source_type":r["source_type"],"timestamp":r["timestamp"],"payload":json.loads(r["payload_json"])} for r in rows]
+
 def camera_status(camera: dict) -> dict:
     if not camera:
         return {"state": "NOT_FOUND"}
@@ -174,5 +225,5 @@ def camera_status(camera: dict) -> dict:
     return {
         "state": "READY_FOR_BROKER",
         "stream": camera["stream"],
-        "message": "Camera metadata is configured. A backend video broker is required before browser playback.",
+        "message": "Camera metadata is configured. Start the backend broker to expose browser playback.",
     }
