@@ -21,7 +21,12 @@
 </div>
 <div class="panel chart"><canvas id="graph" class="graph" width="1200" height="440"></canvas><div class="axis-note"><span id="axisLeft">—</span><span>Frequency</span><span id="axisRight">—</span></div><div class="legend"><span><i style="background:#55d8ff"></i>Spectrum</span><span><i style="background:#ffd166"></i>Noise floor</span><span><i style="background:#69e3ad"></i>Detected signal</span></div></div>
 <div class="panel"><div class="metrics"><div class="metric"><small>Selected Frequency</small><b id="freq">—</b></div><div class="metric"><small>Selected Power</small><b id="power">—</b></div><div class="metric"><small>Noise Floor</small><b id="noise">—</b></div><div class="metric"><small>SNR</small><b id="snr">—</b></div><div class="metric"><small>Sample Rate</small><b id="rate">—</b></div><div class="metric"><small>Detections</small><b id="count">0</b></div></div></div>
-<div class="panel"><h2>Waterfall</h2><canvas id="waterfall" class="waterfall" width="1200" height="230"></canvas><div class="axis-note"><span id="wfLeft">—</span><span>Time →</span><span id="wfRight">—</span></div></div>
+<div class="panel"><h2>Signal Location / Field Direction</h2>
+<div class="notice"><b>Important:</b> RF Finder can plot where measurements were taken and can visualize a direction/bearing supplied by a direction-finding setup. A spectrum peak alone cannot determine the transmitter's location. Your phone GPS/orientation is field context only; it is not an RF sensor.</div>
+<div class="metrics" style="margin-top:10px"><div class="metric"><small>Receiver Latitude</small><b id="locLat">—</b></div><div class="metric"><small>Receiver Longitude</small><b id="locLon">—</b></div><div class="metric"><small>GPS Accuracy</small><b id="locAcc">—</b></div><div class="metric"><small>DF Bearing</small><b id="bearing">—</b></div><div class="metric"><small>Selected Signal</small><b id="locFreq">—</b></div><div class="metric"><small>Location Status</small><b id="locStatus">NO DF INPUT</b></div></div>
+<div class="actions" style="margin-top:10px"><button class="btn" id="locate">Enable GPS</button><input id="bearingInput" class="btn" type="number" min="0" max="359.9" step="0.1" placeholder="Bearing °" style="width:130px"><button class="btn" id="plotBearing">Plot bearing</button><a class="btn" href="map-layers.html">Open RF Map</a></div>
+<div class="notice" style="margin-top:10px">For an actual transmitter estimate, record the same frequency from multiple receiver positions with a calibrated directional antenna/DF sensor and use the bearings as separate observations. The map displays measurement positions and DF geometry; it does not manufacture a location from signal strength.</div>
+</div><div class="panel"><h2>Waterfall</h2><canvas id="waterfall" class="waterfall" width="1200" height="230"></canvas><div class="axis-note"><span id="wfLeft">—</span><span>Time →</span><span id="wfRight">—</span></div></div>
 <div class="grid2"><section class="panel"><h2>Detections</h2><div class="table-wrap"><table><thead><tr><th>Frequency</th><th>Power</th><th>Bandwidth</th><th>SNR</th><th>Confidence</th><th>Source</th></tr></thead><tbody id="rows"><tr><td colspan="6">No detections.</td></tr></tbody></table></div></section><section class="panel"><h2>Selected Peak / Investigation</h2><div id="selected" class="selected notice">Select a detection. Existing authenticated investigation workflow remains the system of record.</div></section></div>
 </main>
 <script>
@@ -40,5 +45,34 @@ $('reset').onclick=()=>{paused=false;last=null;dets=[];$('state').textContent='I
 $('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=await api('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:await f.text()});draw(d);paused=true;$('state').textContent='IMPORTED / PAUSED'}catch(err){alert('Import failed: '+err.message)}e.target.value=''};
 if(token)api('/api/auth/me').then(d=>{$('identity').textContent=d.username+' / '+d.role;refresh()}).catch(()=>{token=null;sessionStorage.removeItem('rf_finder_token')});setInterval(refresh,1000);
 </script>
-</body>
+<script>
+(function(){
+let watchId=null,lastPosition=null,selectedBearing=null;
+const $=id=>document.getElementById(id);
+function fmt(v,d=5){return Number.isFinite(Number(v))?Number(v).toFixed(d):'—'}
+function enableGPS(){
+ if(!navigator.geolocation){$('locStatus').textContent='GPS UNSUPPORTED';return}
+ if(watchId!==null)return;
+ watchId=navigator.geolocation.watchPosition(p=>{
+   lastPosition=p.coords;
+   $('locLat').textContent=fmt(p.coords.latitude);
+   $('locLon').textContent=fmt(p.coords.longitude);
+   $('locAcc').textContent=Number.isFinite(p.coords.accuracy)?'±'+Math.round(p.coords.accuracy)+' m':'—';
+   $('locStatus').textContent=selectedBearing===null?'GPS READY':'DF BEARING READY';
+ },e=>{$('locStatus').textContent='GPS ERROR';console.warn(e)},{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
+}
+function plotBearing(){
+ const b=Number($('bearingInput').value);
+ if(!Number.isFinite(b)||b<0||b>=360){alert('Enter a bearing from 0 to 359.9 degrees.');return}
+ if(!lastPosition){alert('Enable GPS and wait for a position first.');return}
+ selectedBearing=b;
+ $('bearing').textContent=b.toFixed(1)+'°';
+ $('locStatus').textContent='DF BEARING READY';
+ const freq=$('freq').textContent;
+ $('locFreq').textContent=freq==='—'?'Select a detected signal':freq;
+ sessionStorage.setItem('rf_finder_last_df',JSON.stringify({latitude:lastPosition.latitude,longitude:lastPosition.longitude,bearing:b,frequency:$('freq').textContent,timestamp:new Date().toISOString()}));
+}
+$('locate').onclick=enableGPS;$('plotBearing').onclick=plotBearing;
+})();
+</script></body>
 </html>
