@@ -63,6 +63,11 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
         def do_GET(self):
             path=urlparse(self.path).path
             if path in ("/","/tactical"): return self._send(HTML.encode(),content_type="text/html; charset=utf-8")
+            if path == "/rf-studio":
+                from pathlib import Path
+                page = Path(__file__).resolve().parent.parent / "docs" / "rf-studio.html"
+                try: return self._send(page.read_bytes(),content_type="text/html; charset=utf-8")
+                except OSError: return self._send({"error":"RF Studio unavailable"},404)
             if path == "/camera":
                 from pathlib import Path
                 page = Path(__file__).resolve().parent.parent / "docs" / "camera.html"
