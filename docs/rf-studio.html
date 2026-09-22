@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RF Finder — RF Studio</title>
+<style>
+:root{color-scheme:dark;--bg:#050a10;--panel:#0b151f;--line:#1d3444;--text:#e6f6ff;--muted:#91a8b8;--accent:#55d8ff;--good:#69e3ad;--warn:#ffd166}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#102637,#050a10 45%);color:var(--text);font:14px system-ui,sans-serif}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line);background:#07111ae8;position:sticky;top:0;z-index:5}
+.brand{font-weight:900;letter-spacing:.12em;margin-right:12px}.brand span{color:var(--accent)}
+nav{display:flex;gap:7px;flex-wrap:wrap}nav a,.btn{color:var(--text);text-decoration:none;background:#102536;border:1px solid #2b5369;border-radius:7px;padding:8px 11px;cursor:pointer}
+nav a:hover,.btn:hover{background:#17374a}.pill{border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--muted);margin-left:auto}
+main{max-width:1280px;margin:auto;padding:18px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:end;margin-bottom:15px}.hero h1{font-size:38px;margin:0}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}.panel{background:linear-gradient(180deg,#0b1620,#09121a);border:1px solid var(--line);border-radius:12px;padding:14px}.panel h2,.panel h3{margin:0 0 9px;color:var(--accent)}
+canvas{display:block;width:100%;height:auto;background:#02070b;border:1px solid #173042;border-radius:6px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{padding:10px;border:1px solid var(--line);border-radius:8px}.value{font-size:20px;font-weight:800}.table{width:100%;border-collapse:collapse;font-size:12px}.table th,.table td{text-align:left;padding:7px;border-bottom:1px solid var(--line)}.source{color:var(--warn)}.ok{color:var(--good)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.notice{font-size:12px;color:var(--muted);line-height:1.45}.error{color:#ff9f9f}
+@media(max-width:850px){.grid{grid-template-columns:1fr}.hero{display:block}.pill{margin-left:0}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header><div class="brand">RF <span>FINDER</span></div><nav>
+<a href="/tactical">Tactical Map</a><a href="/rf-studio">RF Studio</a><a href="http://127.0.0.1:8090/spectrum">Spectrum</a><a href="/camera">Camera</a></nav>
+<span class="pill" id="identity">CHECKING SESSION…</span><button class="btn" id="logout">Logout</button></header>
+<main>
+<section class="hero"><div><h1>RF Studio</h1><div class="muted">One local authenticated field session for map, spectrum, camera, and investigations.</div></div><div class="actions"><button class="btn" id="start">Start RF service</button><button class="btn" id="stop">Pause RF service</button></div></section>
+<div class="notice panel">RF Studio does not create a second RF pipeline. It reads the same RFService state used by Tactical Map. The local session cookie is shared across RF Finder services on the same computer.</div>
+<section class="grid">
+<div>
+<div class="panel"><h2>Live Spectrum</h2><canvas id="spectrum" width="1000" height="360"></canvas></div>
+<div class="panel"><h2>Waterfall</h2><canvas id="waterfall" width="1000" height="240"></canvas></div>
+<div class="panel"><h2>Detections</h2><table class="table"><thead><tr><th>Frequency</th><th>Power</th><th>SNR</th><th>Confidence</th><th>Source</th></tr></thead><tbody id="rows"><tr><td colspan="5">Loading…</td></tr></tbody></table></div>
+</div>
+<aside>
+<div class="panel"><h3>RF State</h3><div class="stats"><div class="stat"><div class="muted">State</div><div class="value" id="state">—</div></div><div class="stat"><div class="muted">Source</div><div class="value source" id="source">—</div></div><div class="stat"><div class="muted">Noise floor</div><div class="value" id="noise">—</div></div></div></div>
+<div class="panel"><h3>Workspace</h3><div class="actions"><a class="btn" href="/tactical">Tactical Map</a><a class="btn" href="http://127.0.0.1:8090/spectrum">Full Spectrum</a><a class="btn" href="/camera">Camera & Audio</a></div></div>
+<div class="panel"><h3>Session</h3><div id="session" class="notice">Checking authenticated local session…</div></div>
+<div class="panel"><h3>Measurement integrity</h3><div class="notice">SIMULATED data remains labeled as simulated. Camera/audio events are independent observations. A detection is a spectral candidate, not proof of transmitter identity or location.</div></div>
+</aside>
+</section>
+</main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+let token=sessionStorage.getItem('rf_finder_token');
+const headers=()=>token?{'Authorization':'Bearer '+token}:{};
+async function api(path,opts={}){opts.headers={...(opts.headers||{}),...headers()};opts.credentials='include';const r=await fetch(path,opts);let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||('HTTP '+r.status));return d}
+function hz(v){v=Number(v);return v>=1e9?(v/1e9).toFixed(3)+' GHz':(v/1e6).toFixed(3)+' MHz'}
+function draw(s){const c=$('spectrum'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);const p=s.power_db||[];if(!p.length)return;const finite=p.filter(Number.isFinite),lo=Math.min(...finite),hi=Math.max(...finite),span=Math.max(1,hi-lo);x.beginPath();p.forEach((v,i)=>{if(!Number.isFinite(v))return;const px=i*(c.width-1)/Math.max(1,p.length-1),py=c.height-12-(v-lo)/span*(c.height-24);i?x.lineTo(px,py):x.moveTo(px,py)});x.strokeStyle='#55d8ff';x.stroke()}
+function waterfall(w){const c=$('waterfall'),x=c.getContext('2d'),fs=w.frames||[];x.clearRect(0,0,c.width,c.height);const rows=Math.min(fs.length,c.height);for(let r=0;r<rows;r++){const row=fs[fs.length-rows+r]||[],f=row.filter(Number.isFinite);if(!f.length)continue;const lo=Math.min(...f),hi=Math.max(...f),span=Math.max(1,hi-lo);for(let i=0;i<row.length;i++){const v=Number.isFinite(row[i])?(row[i]-lo)/span:0;const g=Math.floor(255*v);x.fillStyle='rgb('+g+','+Math.floor(100+120*v)+','+(255-g)+')';x.fillRect(i*c.width/row.length,c.height-1-r,c.width/row.length+1,1)}}}
+function render(ds){$('rows').innerHTML=(ds||[]).map(d=>'<tr><td>'+hz(d.frequency_hz)+'</td><td>'+Number(d.power_dbfs).toFixed(1)+' dBFS</td><td>'+Number(d.snr_db).toFixed(1)+' dB</td><td>'+Math.round(Number(d.confidence)*100)+'%</td><td>'+d.source_type+'</td></tr>').join('')||'<tr><td colspan="5">No detections.</td></tr>'}
+async function refresh(){try{const [me,s,w,st]=await Promise.all([api('/api/auth/me'),api('/api/spectrum'),api('/api/waterfall'),api('/api/status')]);$('identity').textContent=me.username+' / '+me.role;$('session').textContent='Authenticated as '+me.username+' with '+me.permissions?.length+' permissions.';$('state').textContent=st.running?'RUNNING':'PAUSED';$('source').textContent=s.source_type||'UNKNOWN';$('noise').textContent=Number.isFinite(Number(s.noise_floor_dbfs))?Number(s.noise_floor_dbfs).toFixed(1)+' dBFS':'—';draw(s);waterfall(w);render(s.detections)}catch(e){$('identity').textContent='SIGNED OUT';$('session').textContent=e.message;$('state').textContent='AUTH ERROR'}}
+$('start').onclick=async()=>{try{await api('/api/start',{method:'POST'});refresh()}catch(e){alert(e.message)}};$('stop').onclick=async()=>{try{await api('/api/stop',{method:'POST'});refresh()}catch(e){alert(e.message)}};$('logout').onclick=async()=>{try{await api('/api/auth/logout',{method:'POST'})}finally{sessionStorage.removeItem('rf_finder_token');location.href='/rf-studio'}};
+refresh();setInterval(refresh,1000);
+})();
+</script>
+</body>
+</html>
