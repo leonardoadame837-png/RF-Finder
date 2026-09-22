@@ -52,12 +52,14 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
     api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path); camera_registry=CameraRegistry(service.config.database_path); vision_events=VisionEventStore(service.config.database_path); broker=CameraBroker(event_callback=vision_events.add)
     class Handler(BaseHTTPRequestHandler):
         def _send(self,payload,status=200,content_type="application/json"):
-            body=payload if isinstance(payload,bytes) else json.dumps(payload).encode(); self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
+            body=payload if isinstance(payload,bytes) else json.dumps(payload).encode(); self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Cache-Control","no-store"); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Vary","Origin"); self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type"); self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
         def _json_body(self):
             try:
                 length=int(self.headers.get("Content-Length","0")); return json.loads(self.rfile.read(length)) if length else {}
             except (ValueError,json.JSONDecodeError): return {}
         def _require(self,p): return api_auth.require(self.headers.get("Authorization"),p)
+        def do_OPTIONS(self):
+            self.send_response(204); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Vary","Origin"); self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type"); self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS"); self.end_headers()
         def do_GET(self):
             path=urlparse(self.path).path
             if path in ("/","/tactical"): return self._send(HTML.encode(),content_type="text/html; charset=utf-8")
