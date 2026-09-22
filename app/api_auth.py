@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from http.cookies import SimpleCookie
+from http.cookies import CookieError, SimpleCookie
 
 from app.auth import AuthManager, Session, User
 
