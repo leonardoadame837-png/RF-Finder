@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from app.api_auth import APIAuth
+from app.api_auth import APIAuth, SESSION_COOKIE
 from app.auth import AuthManager
 from app.field_service import RFService
 
@@ -73,7 +73,7 @@ def create_server(service: RFService, host: str = "127.0.0.1", port: int = 8090,
             return json.loads(self.rfile.read(length))
 
         def _require(self, permission=None):
-            return api_auth.require(self.headers.get("Authorization"), permission)
+            return api_auth.require(self.headers.get("Authorization"), permission, self.headers.get("Cookie"))
 
         def do_OPTIONS(self):
             self.send_response(204)
@@ -114,9 +114,9 @@ def create_server(service: RFService, host: str = "127.0.0.1", port: int = 8090,
             try:
                 if path == "/api/auth/login":
                     data = self._json_body(); session = api_auth.login(str(data.get("username", "")), str(data.get("password", "")))
-                    return self._send({"token": session.token, "expires_at": session.expires_at, "username": session.user.username, "role": session.user.role})
+                    self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Cache-Control", "no-store"); self.send_header("Set-Cookie", f"{SESSION_COOKIE}={session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600"); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials", "true"); self.send_header("Vary","Origin"); body=json.dumps({"token":session.token,"expires_at":session.expires_at,"username":session.user.username,"role":session.user.role}).encode(); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
                 if path == "/api/auth/logout":
-                    self._require(None); api_auth.logout(self.headers.get("Authorization")); return self._send({"ok": True})
+                    self._require(None); api_auth.logout(self.headers.get("Authorization"), self.headers.get("Cookie")); body=json.dumps({"ok":True}).encode(); self.send_response(200); self.send_header("Content-Type","application/json"); self.send_header("Cache-Control","no-store"); self.send_header("Set-Cookie",f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"); self.send_header("Access-Control-Allow-Origin",self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials","true"); self.send_header("Vary","Origin"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
                 if path == "/api/start":
                     self._require("rf.scan"); service.start(); return self._send(service.status())
                 if path == "/api/stop":

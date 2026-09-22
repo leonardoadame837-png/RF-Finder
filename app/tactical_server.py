@@ -7,7 +7,7 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from app.api_auth import APIAuth
+from app.api_auth import APIAuth, SESSION_COOKIE
 from app.auth import AuthError, AuthManager
 from app.evidence_api import investigation_report, localization_payload
 from app.investigations import InvestigationStore
@@ -57,12 +57,17 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
             try:
                 length=int(self.headers.get("Content-Length","0")); return json.loads(self.rfile.read(length)) if length else {}
             except (ValueError,json.JSONDecodeError): return {}
-        def _require(self,p): return api_auth.require(self.headers.get("Authorization"),p)
+        def _require(self,p): return api_auth.require(self.headers.get("Authorization"),p,self.headers.get("Cookie"))
         def do_OPTIONS(self):
             self.send_response(204); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Vary","Origin"); self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type"); self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS"); self.end_headers()
         def do_GET(self):
             path=urlparse(self.path).path
             if path in ("/","/tactical"): return self._send(HTML.encode(),content_type="text/html; charset=utf-8")
+            if path == "/rf-studio":
+                from pathlib import Path
+                page = Path(__file__).resolve().parent.parent / "docs" / "rf-studio.html"
+                try: return self._send(page.read_bytes(),content_type="text/html; charset=utf-8")
+                except OSError: return self._send({"error":"RF Studio unavailable"},404)
             if path == "/camera":
                 from pathlib import Path
                 page = Path(__file__).resolve().parent.parent / "docs" / "camera.html"
@@ -96,8 +101,8 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
         def do_POST(self):
             path=urlparse(self.path).path
             try:
-                if path=="/api/auth/login": data=self._json_body(); s=api_auth.login(str(data.get("username","")),str(data.get("password",""))); return self._send({"token":s.token,"expires_at":s.expires_at,"username":s.user.username,"role":s.user.role,"permissions":sorted(api_auth_permissions(s.user.role))})
-                if path=="/api/auth/logout": self._require(None); api_auth.logout(self.headers.get("Authorization")); return self._send({"ok":True})
+                if path=="/api/auth/login": data=self._json_body(); s=api_auth.login(str(data.get("username","")),str(data.get("password",""))); self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Cache-Control", "no-store"); self.send_header("Set-Cookie", f"{SESSION_COOKIE}={s.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600"); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials", "true"); self.send_header("Vary","Origin"); body=json.dumps({"token":s.token,"expires_at":s.expires_at,"username":s.user.username,"role":s.user.role,"permissions":sorted(api_auth_permissions(s.user.role))}).encode(); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
+                if path=="/api/auth/logout":\n                    self._require(None); api_auth.logout(self.headers.get("Authorization"), self.headers.get("Cookie")); body=json.dumps({"ok":True}).encode(); self.send_response(200); self.send_header("Content-Type","application/json"); self.send_header("Cache-Control","no-store"); self.send_header("Set-Cookie",f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"); self.send_header("Access-Control-Allow-Origin",self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials","true"); self.send_header("Vary","Origin"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
                 if path=="/api/start": self._require("rf.scan"); service.start(); return self._send(service.status())
                 if path=="/api/stop": self._require("rf.scan"); service.stop(); return self._send(service.status())
                 if path=="/api/investigations": self._require("investigation.write"); data=self._json_body(); return self._send(investigation_store.create(str(data.get("title","RF investigation")),str(data.get("notes",""))),201)
