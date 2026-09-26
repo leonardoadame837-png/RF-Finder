@@ -1,0 +1,10 @@
+{
+  "name": "RF Finder Camera",
+  "short_name": "RF Camera",
+  "start_url": "./camera.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050a11",
+  "theme_color": "#050a11",
+  "description": "RF Finder phone camera and audio observation workspace."
+}
