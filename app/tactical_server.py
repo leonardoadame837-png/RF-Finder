@@ -102,7 +102,21 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
             path=urlparse(self.path).path
             try:
                 if path=="/api/auth/login": data=self._json_body(); s=api_auth.login(str(data.get("username","")),str(data.get("password",""))); self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Cache-Control", "no-store"); self.send_header("Set-Cookie", f"{SESSION_COOKIE}={s.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600"); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials", "true"); self.send_header("Vary","Origin"); body=json.dumps({"token":s.token,"expires_at":s.expires_at,"username":s.user.username,"role":s.user.role,"permissions":sorted(api_auth_permissions(s.user.role))}).encode(); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
-                if path=="/api/auth/logout":\n                    self._require(None); api_auth.logout(self.headers.get("Authorization"), self.headers.get("Cookie")); body=json.dumps({"ok":True}).encode(); self.send_response(200); self.send_header("Content-Type","application/json"); self.send_header("Cache-Control","no-store"); self.send_header("Set-Cookie",f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"); self.send_header("Access-Control-Allow-Origin",self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials","true"); self.send_header("Vary","Origin"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
+                if path=="/api/auth/logout":
+                    self._require(None)
+                    api_auth.logout(self.headers.get("Authorization"), self.headers.get("Cookie"))
+                    body=json.dumps({"ok":True}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type","application/json")
+                    self.send_header("Cache-Control","no-store")
+                    self.send_header("Set-Cookie",f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+                    self.send_header("Access-Control-Allow-Origin",self.headers.get("Origin","*"))
+                    self.send_header("Access-Control-Allow-Credentials","true")
+                    self.send_header("Vary","Origin")
+                    self.send_header("Content-Length",str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 if path=="/api/start": self._require("rf.scan"); service.start(); return self._send(service.status())
                 if path=="/api/stop": self._require("rf.scan"); service.stop(); return self._send(service.status())
                 if path=="/api/investigations": self._require("investigation.write"); data=self._json_body(); return self._send(investigation_store.create(str(data.get("title","RF investigation")),str(data.get("notes",""))),201)
