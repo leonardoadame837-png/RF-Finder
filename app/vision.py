@@ -117,7 +117,7 @@ class CameraRegistry:
         camera["audio_enabled"] = bool(camera["audio_enabled"])
         camera["enabled"] = bool(camera["enabled"])
         camera["credential_configured"] = bool(camera.get("username")) and validate_secret_reference(camera["id"])
-        camera["connection"] = "READY_FOR_BROKER" if camera["credential_configured"] else "CREDENTIAL_REQUIRED"
+        camera["connection"] = "READY_FOR_BROKER" if (not camera.get("username") or camera["credential_configured"]) else "CREDENTIAL_REQUIRED"
         camera["stream"] = build_server_side_stream_reference(camera)
         return camera
 
