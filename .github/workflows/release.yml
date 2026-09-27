@@ -35,12 +35,28 @@ jobs:
       - name: Package source
         run: git archive --format=zip --output="rf-finder-source-${GITHUB_REF_NAME}.zip" HEAD
 
-      - name: Create GitHub release
+      - name: Upload APK and source as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rf-finder-release-${{ github.ref_name }}
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            rf-finder-source-${{ github.ref_name }}.zip
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            android/app/build/outputs/apk/debug/app-debug.apk \
-            "rf-finder-source-${GITHUB_REF_NAME}.zip" \
-            --generate-notes \
-            --title "RF Finder ${GITHUB_REF_NAME}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              android/app/build/outputs/apk/debug/app-debug.apk \
+              "rf-finder-source-${GITHUB_REF_NAME}.zip" \
+              --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              android/app/build/outputs/apk/debug/app-debug.apk \
+              "rf-finder-source-${GITHUB_REF_NAME}.zip" \
+              --generate-notes \
+              --title "RF Finder ${GITHUB_REF_NAME}"
+          fi
