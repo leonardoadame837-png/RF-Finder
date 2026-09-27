@@ -31,7 +31,7 @@ let token=sessionStorage.getItem('rf_finder_token'),map,markers=new Map(),select
 function initMap(){map=L.map('map').setView([39,-98],4);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map)}
 function markerColor(q){if(q.simulated)return '#888';if(q.snr_db>=35)return '#ff5b5b';if(q.snr_db>=25)return '#ff9f43';if(q.snr_db>=20)return '#ffd34d';return '#35d07f'}
 function renderMap(obs){const valid=obs.filter(q=>q.latitude!=null&&q.longitude!=null);valid.forEach(q=>{const id=String(q.id),color=markerColor(q),html=`<b>${q.simulated?'SIMULATION':'SDR MEASUREMENT'}</b><br>${fmtHz(q.frequency_hz)}<br>SNR ${Number(q.snr_db).toFixed(1)} dB · BW ${(Number(q.bandwidth_hz)/1000).toFixed(1)} kHz<br>Power ${Number(q.peak_power_db).toFixed(1)} dB<br>${q.timestamp}<br>Receiver GPS: ${Number(q.latitude).toFixed(6)}, ${Number(q.longitude).toFixed(6)}`;let m=markers.get(id);if(!m){m=L.circleMarker([q.latitude,q.longitude],{radius:8,color:'#071019',weight:2,fillColor:color,fillOpacity:.9}).addTo(map);markers.set(id,m)}m.setLatLng([q.latitude,q.longitude]).setStyle({fillColor:color}).bindPopup(html)});if(valid.length)map.setView([valid[valid.length-1].latitude,valid[valid.length-1].longitude],Math.max(map.getZoom(),12))}
-async function api(path,opts={}){opts.headers={...(opts.headers||{}),...(token?{Authorization:'Bearer '+token}:{})};const r=await fetch(path,opts);const d=await r.json();if(r.status===401||r.status===403){if(r.status===401)signout();throw Error(d.error||'Not authorized')}return d}
+async function api(path,opts={}){opts.credentials='include';opts.headers={...(opts.headers||{}),...(token?{Authorization:'Bearer '+token}:{})};const r=await fetch(path,opts);const d=await r.json();if(r.status===401||r.status===403){if(r.status===401)signout();throw Error(d.error||'Not authorized')}return d}
 async function login(){const username=prompt('Username:');if(username===null)return;const password=prompt('Password:');if(password===null)return;try{const d=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});token=d.token;sessionStorage.setItem('rf_finder_token',token);renderAuth(d);refresh()}catch(e){alert('Login failed: '+e.message)}}
 function signout(){token=null;sessionStorage.removeItem('rf_finder_token');$('identity').textContent='SIGNED OUT';$('loginBtn').classList.remove('hidden');['logoutBtn','scanBtn','newInv','reportBtn'].forEach(id=>$(id).classList.add('hidden'));$('signals').textContent='Sign in to view RF data.'}
 async function logout(){try{await api('/api/auth/logout',{method:'POST'})}finally{signout()}}function renderAuth(d){$('identity').textContent=d.username+' / '+d.role;$('loginBtn').classList.add('hidden');['logoutBtn','scanBtn','newInv'].forEach(id=>$(id).classList.remove('hidden'))}
@@ -52,14 +52,35 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
     api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path); camera_registry=CameraRegistry(service.config.database_path); vision_events=VisionEventStore(service.config.database_path); broker=CameraBroker(event_callback=vision_events.add)
     class Handler(BaseHTTPRequestHandler):
         def _send(self,payload,status=200,content_type="application/json"):
-            body=payload if isinstance(payload,bytes) else json.dumps(payload).encode(); self.send_response(status); self.send_header("Content-Type",content_type); self.send_header("Cache-Control","no-store"); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Vary","Origin"); self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type"); self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS"); self.send_header("Access-Control-Allow-Credentials","true"); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
+            body=payload if isinstance(payload,bytes) else json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type",content_type)
+            self.send_header("Cache-Control","no-store")
+            origin=self.headers.get("Origin")
+            if origin:
+                self.send_header("Access-Control-Allow-Origin",origin)
+                self.send_header("Vary","Origin")
+                self.send_header("Access-Control-Allow-Credentials","true")
+            self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS")
+            self.send_header("Content-Length",str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         def _json_body(self):
             try:
                 length=int(self.headers.get("Content-Length","0")); return json.loads(self.rfile.read(length)) if length else {}
             except (ValueError,json.JSONDecodeError): return {}
         def _require(self,p): return api_auth.require(self.headers.get("Authorization"),p,self.headers.get("Cookie"))
         def do_OPTIONS(self):
-            self.send_response(204); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Vary","Origin"); self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type"); self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS"); self.send_header("Access-Control-Allow-Credentials","true"); self.end_headers()
+            self.send_response(204)
+            origin=self.headers.get("Origin")
+            if origin:
+                self.send_header("Access-Control-Allow-Origin",origin)
+                self.send_header("Vary","Origin")
+                self.send_header("Access-Control-Allow-Credentials","true")
+            self.send_header("Access-Control-Allow-Headers","Authorization, Content-Type")
+            self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS")
+            self.end_headers()
         def do_GET(self):
             path=urlparse(self.path).path
             if path in ("/","/tactical"): return self._send(HTML.encode(),content_type="text/html; charset=utf-8")
