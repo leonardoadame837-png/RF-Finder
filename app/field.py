@@ -11,6 +11,7 @@ from .auth import AuthManager
 from .config import Config
 from .field_service import RFService
 from .spectrum_server import create_server as create_spectrum_server
+from .service_discovery import RFServiceAdvertiser
 from .tactical_server import create_server as create_tactical_server
 
 
@@ -55,6 +56,8 @@ def main() -> None:
     auth = APIAuth(AuthManager())
     tactical_server = create_tactical_server(service, host=args.host, port=args.port, auth=auth)
     spectrum_server = create_spectrum_server(service, host=args.host, port=args.spectrum_port, auth=auth)
+    discovery = RFServiceAdvertiser(args.port) if args.host == "0.0.0.0" else None
+    discovery_active = discovery.start() if discovery else False
 
     spectrum_thread = threading.Thread(
         target=spectrum_server.serve_forever,
@@ -74,6 +77,7 @@ def main() -> None:
         local_ip = _local_ip()
         print(f"Phone/LAN tactical dashboard: http://{local_ip}:{args.port}/tactical")
         print(f"Phone/LAN Spectrum Analyzer: http://{local_ip}:{args.spectrum_port}/spectrum")
+        print(f"Phone auto-discovery: {'enabled' if discovery_active else 'unavailable'} (_rf-finder._tcp)")
     else:
         print(f"Dashboard: http://{args.host}:{args.port}/tactical")
         print(f"Spectrum Analyzer: http://{args.host}:{args.spectrum_port}/spectrum")
@@ -85,6 +89,8 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        if discovery:
+            discovery.stop()
         spectrum_server.shutdown()
         spectrum_server.server_close()
         service.stop()
