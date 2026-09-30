@@ -30,21 +30,19 @@ jobs:
           test -f release/app-debug.apk
           ls -lh release/app-debug.apk
 
-      - name: Create or update Developer Latest release
+      - name: Create immutable developer release with APK
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          RELEASE_TAG="developer-latest"
-          APK="release/app-debug.apk"
+          RELEASE_TAG="android-build-${RUN_NUMBER}"
 
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$APK"               --repo "$GITHUB_REPOSITORY"               --clobber
-          else
-            gh release create "$RELEASE_TAG" "$APK"               --repo "$GITHUB_REPOSITORY"               --title "RF Finder Developer — Latest"               --notes "Automatically updated from the latest successful RF Finder Android APK build. This is a developer/testing build."               --prerelease
-          fi
+          gh release create "${RELEASE_TAG}"             release/app-debug.apk             --repo "${GITHUB_REPOSITORY}"             --target "${HEAD_SHA}"             --title "RF Finder Android Developer Build #${RUN_NUMBER}"             --notes "Automatically published from successful RF Finder Android workflow run #${RUN_NUMBER}. This is a developer/testing APK."             --prerelease
 
       - name: Verify release asset
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
         run: |
-          gh release view developer-latest             --repo "$GITHUB_REPOSITORY"             --json assets             --jq '.assets[].name' | grep -Fx 'app-debug.apk'
+          gh release view "android-build-${RUN_NUMBER}"             --repo "${GITHUB_REPOSITORY}"             --json assets             --jq '.assets[].name' | grep -Fx 'app-debug.apk'
