@@ -5,6 +5,7 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android-apk.yml"
+      - ".github/workflows/publish-android-release.yml"
   workflow_dispatch:
 
 jobs:
