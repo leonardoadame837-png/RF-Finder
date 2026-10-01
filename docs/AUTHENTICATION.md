@@ -1,7 +1,7 @@
 # RF Finder Authentication Specification
 
 **Status:** Authoritative current authentication specification  
-**Scope:** Local prototype authentication, HTTP API authentication, RBAC, and the boundary to future Android/voice-bot clients  
+**Scope:** Local prototype authentication, HTTP API authentication, RBAC, and the boundary to future voice-bot clients  
 **Implementation references:** `app/auth.py`, `app/api_auth.py`, `app/tactical_server.py`, `app/voice_bot.py`
 
 > This document defines the authentication model that RF Finder implements today. It deliberately does **not** introduce JWT, OAuth 2.0, OpenID Connect, refresh tokens, or a cloud identity provider into the local prototype. Those are future architecture options, not current requirements.
@@ -18,7 +18,7 @@ RF Finder currently uses a **local, process-oriented authentication model**:
 6. `APIAuth` validates the session and applies role-based permissions.
 7. Session state is lost when the process exits or restarts.
 
-The model is intended for the current local/offline prototype and controlled development environments. It is not yet the final identity architecture for a remotely connected Android application or hosted voice service.
+The model is intended for the current local/offline prototype and controlled development environments. It is not yet the final identity architecture for a hosted or remotely connected voice service.
 
 ## 2. Authoritative implementation
 
@@ -167,7 +167,7 @@ The tactical browser UI currently:
 
 The server also sends `Cache-Control: no-store` on its responses.
 
-This browser storage arrangement is part of the current prototype and should not be treated as the final mobile credential-storage design.
+This browser storage arrangement is part of the current prototype and should not be treated as the final credential-storage design for a remote client.
 
 ## 4. Current roles and permissions
 
@@ -341,59 +341,11 @@ Any authentication-related change to the current prototype must preserve these r
 12. Add or update authentication tests whenever authentication behavior changes.
 13. Treat the current token as an opaque session identifier, not as a claim-bearing identity document.
 
-## 10. Future Android / voice-bot authentication model
+## 10. Future voice-bot authentication model
 
-The eventual Android client and network-connected voice bot are a **separate architecture phase**.
+A future network-connected voice bot is a **separate architecture phase**.
 
-The current local session model should not be stretched into a public distributed identity protocol merely because those clients are planned.
-
-Future design work may evaluate:
-
-- a dedicated identity/authentication service
-- OAuth 2.0 / OpenID Connect where appropriate
-- short-lived access tokens
-- refresh-token rotation and revocation
-- secure Android credential storage
-- device registration and device identity
-- scoped client permissions
-- token audience and issuer validation
-- TLS-only transport
-- server-side session/revocation controls
-- MFA or step-up authentication for sensitive administrative actions
-- voice-specific authorization so speech input cannot bypass normal API permissions
-- audit trails linking account, device, request, and RF operation
-
-Any future protocol must preserve the same core authorization principle:
-
-**authentication establishes who/what is acting; authorization determines which RF Finder operation that principal may perform.**
-
-### Android client boundary
-
-A future Android application should authenticate to a dedicated remote API boundary rather than directly reading the local `users.json` file.
-
-The conceptual future flow is:
-
-```
-Android app
-    |
-    | secure authentication
-    v
-Identity / authentication service
-    |
-    | access credential
-    v
-RF Finder API
-    |
-    v
-server-side authorization
-    |
-    v
-RF operation
-```
-
-The exact protocol is intentionally **not fixed by this document**.
-
-### Future voice-bot boundary
+The current local session model should not be stretched into a public distributed identity protocol merely because a remote voice client is planned.
 
 A network-connected voice bot should not receive a privileged RF capability merely because a voice command was recognized.
 
