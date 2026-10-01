@@ -35,8 +35,6 @@ Each CI run:
 3. runs the blocking flake8 checks
 4. runs the complete pytest suite
 
-The Android debug APK workflow remains separate and only runs when Android files change or when manually dispatched.
-
 ## Development workflow
 
 Recommended workflow:
