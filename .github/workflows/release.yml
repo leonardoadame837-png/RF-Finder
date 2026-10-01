@@ -17,31 +17,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
-
-      - name: Build Android debug APK
-        working-directory: android
-        run: gradle --no-daemon assembleDebug
-
       - name: Package source
         run: git archive --format=zip --output="rf-finder-source-${GITHUB_REF_NAME}.zip" HEAD
 
-      - name: Upload APK and source as workflow artifacts
+      - name: Upload source workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: rf-finder-release-${{ github.ref_name }}
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            rf-finder-source-${{ github.ref_name }}.zip
+          path: rf-finder-source-${{ github.ref_name }}.zip
           if-no-files-found: error
 
       - name: Create or update GitHub release
@@ -50,12 +33,10 @@ jobs:
         run: |
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" \
-              android/app/build/outputs/apk/debug/app-debug.apk \
               "rf-finder-source-${GITHUB_REF_NAME}.zip" \
               --clobber
           else
             gh release create "${GITHUB_REF_NAME}" \
-              android/app/build/outputs/apk/debug/app-debug.apk \
               "rf-finder-source-${GITHUB_REF_NAME}.zip" \
               --generate-notes \
               --title "RF Finder ${GITHUB_REF_NAME}"
