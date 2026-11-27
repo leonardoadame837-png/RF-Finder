@@ -51,12 +51,20 @@ async function status(){if(!token)return;try{const s=await api('/api/status');$(
 def create_server(service, host="127.0.0.1", port=8000, auth=None):
     api_auth=auth or APIAuth(AuthManager()); investigation_store=InvestigationStore(service.config.database_path); camera_registry=CameraRegistry(service.config.database_path); vision_events=VisionEventStore(service.config.database_path); broker=CameraBroker(event_callback=vision_events.add)
     class Handler(BaseHTTPRequestHandler):
+        def _safe_origin(self):
+            origin=self.headers.get("Origin")
+            if not origin or "\r" in origin or "\n" in origin:
+                return None
+            p=urlparse(origin)
+            if p.scheme in ("http","https") and p.netloc:
+                return origin
+            return None
         def _send(self,payload,status=200,content_type="application/json"):
             body=payload if isinstance(payload,bytes) else json.dumps(payload).encode()
             self.send_response(status)
             self.send_header("Content-Type",content_type)
             self.send_header("Cache-Control","no-store")
-            origin=self.headers.get("Origin")
+            origin=self._safe_origin()
             if origin:
                 self.send_header("Access-Control-Allow-Origin",origin)
                 self.send_header("Vary","Origin")
@@ -73,7 +81,7 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
         def _require(self,p): return api_auth.require(self.headers.get("Authorization"),p,self.headers.get("Cookie"))
         def do_OPTIONS(self):
             self.send_response(204)
-            origin=self.headers.get("Origin")
+            origin=self._safe_origin()
             if origin:
                 self.send_header("Access-Control-Allow-Origin",origin)
                 self.send_header("Vary","Origin")
@@ -122,7 +130,7 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
         def do_POST(self):
             path=urlparse(self.path).path
             try:
-                if path=="/api/auth/login": data=self._json_body(); s=api_auth.login(str(data.get("username","")),str(data.get("password",""))); self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Cache-Control", "no-store"); self.send_header("Set-Cookie", f"{SESSION_COOKIE}={s.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600"); self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin","*")); self.send_header("Access-Control-Allow-Credentials", "true"); self.send_header("Vary","Origin"); body=json.dumps({"token":s.token,"expires_at":s.expires_at,"username":s.user.username,"role":s.user.role,"permissions":sorted(api_auth_permissions(s.user.role))}).encode(); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
+                if path=="/api/auth/login": data=self._json_body(); s=api_auth.login(str(data.get("username","")),str(data.get("password",""))); self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Cache-Control", "no-store"); self.send_header("Set-Cookie", f"{SESSION_COOKIE}={s.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=3600"); origin=self._safe_origin(); self.send_header("Access-Control-Allow-Origin", origin) if origin else None; self.send_header("Access-Control-Allow-Credentials", "true") if origin else None; self.send_header("Vary","Origin") if origin else None; body=json.dumps({"token":s.token,"expires_at":s.expires_at,"username":s.user.username,"role":s.user.role,"permissions":sorted(api_auth_permissions(s.user.role))}).encode(); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body); return
                 if path=="/api/auth/logout":
                     self._require(None)
                     api_auth.logout(self.headers.get("Authorization"), self.headers.get("Cookie"))
@@ -131,9 +139,10 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                     self.send_header("Content-Type","application/json")
                     self.send_header("Cache-Control","no-store")
                     self.send_header("Set-Cookie",f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
-                    self.send_header("Access-Control-Allow-Origin",self.headers.get("Origin","*"))
-                    self.send_header("Access-Control-Allow-Credentials","true")
-                    self.send_header("Vary","Origin")
+                    origin=self._safe_origin()
+                    self.send_header("Access-Control-Allow-Origin",origin) if origin else None
+                    self.send_header("Access-Control-Allow-Credentials","true") if origin else None
+                    self.send_header("Vary","Origin") if origin else None
                     self.send_header("Content-Length",str(len(body)))
                     self.end_headers()
                     self.wfile.write(body)
