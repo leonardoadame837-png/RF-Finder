@@ -105,7 +105,14 @@ def create_server(service, host="127.0.0.1", port=8000, auth=None):
                 if path.startswith("/api/cameras/") and "/stream/" in path:
                     self._require("investigation.read")
                     parts=path.split("/"); camera_id=int(parts[3]); relative="/".join(parts[5:])
-                    file=broker.stream_file(camera_id,relative)
+                    rel_norm=os.path.normpath(relative).replace("\\","/")
+                    rel_parts=rel_norm.split("/")
+                    if (not relative or relative.startswith("/") or "\\" in relative or
+                        rel_norm in ("",".","..") or any(p in ("",".","..") for p in rel_parts) or
+                        any(not all(ch.isalnum() or ch in ("-","_",".") for ch in p) for p in rel_parts) or
+                        not (rel_norm.endswith(".m3u8") or rel_norm.endswith(".ts"))):
+                        return self._send({"error":"stream segment not found"},404)
+                    file=broker.stream_file(camera_id,rel_norm)
                     if not file: return self._send({"error":"stream segment not found"},404)
                     mime="application/vnd.apple.mpegurl" if file.suffix==".m3u8" else "video/mp2t"
                     return self._send(file.read_bytes(),content_type=mime)
